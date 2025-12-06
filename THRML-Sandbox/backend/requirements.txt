@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+jax
+jaxlib
+numpy
+pytest
+httpx  # Required for FastAPI TestClient
+equinox
+jaxtyping
+httpx

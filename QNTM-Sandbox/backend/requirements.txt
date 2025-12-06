@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+jax
+jaxlib
+numpy
+dwave-neal
+dimod
+requests
+pandas
+plotly
