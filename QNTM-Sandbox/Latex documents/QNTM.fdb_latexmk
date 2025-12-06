@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1764686004.36062 "c:/Users/ginom/Desktop/ASL-Sandbox/QNTM-Sandbox/Latex documents/QNTM.tex" "QNTM.pdf" "QNTM" 1764686005.14694 0
-  "C:/Users/ginom/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map" 1764447380 82560 ef239c2cb0a12117bb5525d1036b4375 ""
+["pdflatex"] 1765049132.2783 "c:/Users/ginom/Desktop/ASL-Sandbox/QNTM-Sandbox/Latex documents/QNTM.tex" "QNTM.pdf" "QNTM" 1765049135.10815 0
+  "C:/Users/ginom/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map" 1765036642 165960 3a7e7642a1b43c3944dd6f0d2ed395b6 ""
   "C:/Users/ginom/AppData/Local/MiKTeX/miktex/data/le/pdftex/pdflatex.fmt" 1760362162 24225047 d89de77ee699ec8e8a447c1f4cabba67 ""
   "C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/base/8r.enc" 1458473887 4993 80dc9bab7f31fb78a000ccfed0e27cab ""
   "C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/tfm/public/cm/cmr12.tfm" 1136765053 1288 655e228510b4c2a1abe905c368440826 ""
@@ -125,11 +125,11 @@
   "C:/Users/ginom/AppData/Local/Programs/MiKTeX/tex/latex/txfonts/utxsyc.fd" 977342760 310 4b5d6fe830337242ef847b3bff48ba21 ""
   "C:/Users/ginom/AppData/Local/Programs/MiKTeX/tex/latex/url/url.sty" 1388490452 12796 8edb7d69a20b857904dd0ea757c14ec9 ""
   "C:/Users/ginom/AppData/Local/Programs/MiKTeX/tex/latex/xcolor/xcolor.sty" 1700127522 55487 80a65caedd3722f4c20a14a69e785d8f ""
-  "QNTM.aux" 1764686004 1818 1905d2c0078704da96f0cfff407cf465 "pdflatex"
-  "QNTM.out" 1764686004 1349 3060ac2d82d5c8ce1f6278df7fae8cc0 "pdflatex"
-  "QNTM.tex" 1764514076 9610 4b7a133434f7675aa5bdd99dd2125d0a ""
+  "QNTM.aux" 1765049134 1818 1905d2c0078704da96f0cfff407cf465 "pdflatex"
+  "QNTM.out" 1765049134 1349 3060ac2d82d5c8ce1f6278df7fae8cc0 "pdflatex"
+  "QNTM.tex" 1765049129 9624 39a2a8128b74eed250da7e5626065a3d ""
   "aims.cls" 1760132739 14029 6fc24d33ec3279f089f6be0b480696be ""
-  "c:/Users/ginom/Desktop/ASL-Sandbox/QNTM-Sandbox/Latex documents/QNTM.tex" 1764514076 9610 4b7a133434f7675aa5bdd99dd2125d0a ""
+  "c:/Users/ginom/Desktop/ASL-Sandbox/QNTM-Sandbox/Latex documents/QNTM.tex" 1765049129 9624 39a2a8128b74eed250da7e5626065a3d ""
   "figure.pdf" 1760132739 23625 732fbc6d06f24cfa7fee82be188023c9 ""
   "logo.pdf" 1760132739 24692 ad190bab5a36c20922b23a2e3caa2ac8 ""
   "logobottom.pdf" 1760132739 55258 669bd78cbc9377932d9cd0a9b2532923 ""

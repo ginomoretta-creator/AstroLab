@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2025.10.13)  2 DEC 2025 11:33
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2025.10.13)  6 DEC 2025 16:25
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -533,34 +533,34 @@ Package hyperref Info: Link coloring ON on input line 28.
 Package caption Info: Begin \AtBeginDocument code.
 Package caption Info: End \AtBeginDocument code.
 LaTeX Font Info:    Font shape `OT1/txr/b/n' in size <12> not available
-(Font)              Font shape `OT1/txr/bx/n' tried instead on input line 47.
-LaTeX Font Info:    Trying to load font information for U+txsya on input line 53.
+(Font)              Font shape `OT1/txr/bx/n' tried instead on input line 48.
+LaTeX Font Info:    Trying to load font information for U+txsya on input line 54.
 (C:\Users\ginom\AppData\Local\Programs\MiKTeX\tex/latex/txfonts\utxsya.fd
 File: utxsya.fd 2000/12/15 v3.1
 )
-LaTeX Font Info:    Trying to load font information for U+txsyb on input line 53.
+LaTeX Font Info:    Trying to load font information for U+txsyb on input line 54.
  (C:\Users\ginom\AppData\Local\Programs\MiKTeX\tex/latex/txfonts\utxsyb.fd
 File: utxsyb.fd 2000/12/15 v3.1
 )
-LaTeX Font Info:    Trying to load font information for U+txmia on input line 53.
+LaTeX Font Info:    Trying to load font information for U+txmia on input line 54.
  (C:\Users\ginom\AppData\Local\Programs\MiKTeX\tex/latex/txfonts\utxmia.fd
 File: utxmia.fd 2000/12/15 v3.1
 )
-LaTeX Font Info:    Trying to load font information for U+txsyc on input line 53.
+LaTeX Font Info:    Trying to load font information for U+txsyc on input line 54.
  (C:\Users\ginom\AppData\Local\Programs\MiKTeX\tex/latex/txfonts\utxsyc.fd
 File: utxsyc.fd 2000/12/15 v3.1
 )
 LaTeX Font Info:    Font shape `OT1/txr/b/it' in size <12> not available
-(Font)              Font shape `OT1/txr/bx/it' tried instead on input line 59.
-LaTeX Font Info:    Trying to load font information for OT1+txss on input line 59.
+(Font)              Font shape `OT1/txr/bx/it' tried instead on input line 60.
+LaTeX Font Info:    Trying to load font information for OT1+txss on input line 60.
  (C:\Users\ginom\AppData\Local\Programs\MiKTeX\tex/latex/txfonts\ot1txss.fd
 File: ot1txss.fd 2000/12/15 v3.1
 )
 LaTeX Font Info:    Font shape `OT1/txss/m/n' will be
-(Font)              scaled to size 6.19397pt on input line 59.
+(Font)              scaled to size 6.19397pt on input line 60.
 LaTeX Font Info:    Font shape `OT1/txr/b/n' in size <15.06> not available
-(Font)              Font shape `OT1/txr/bx/n' tried instead on input line 59.
-LaTeX Font Info:    Trying to load font information for TS1+txr on input line 59.
+(Font)              Font shape `OT1/txr/bx/n' tried instead on input line 60.
+LaTeX Font Info:    Trying to load font information for TS1+txr on input line 60.
  (C:\Users\ginom\AppData\Local\Programs\MiKTeX\tex/latex/txfonts\ts1txr.fd
 File: ts1txr.fd 2000/12/15 v3.1
 )
@@ -569,7 +569,7 @@ pdfTeX warning: pdflatex (file ./logo.pdf): PDF inclusion: found PDF version <1.
 <logo.pdf, id=43, 308.80368pt x 114.17656pt>
 File: logo.pdf Graphic file (type pdf)
 <use logo.pdf>
-Package pdftex.def Info: logo.pdf  used on input line 66.
+Package pdftex.def Info: logo.pdf  used on input line 67.
 (pdftex.def)             Requested size: 151.709pt x 56.09334pt.
 
 Overfull \vbox (89.84523pt too high) has occurred while \output is active []
@@ -585,13 +585,13 @@ pdfTeX warning: pdflatex (file ./figure.pdf): PDF inclusion: found PDF version <
 <figure.pdf, id=75, 166.37157pt x 157.21736pt>
 File: figure.pdf Graphic file (type pdf)
 <use figure.pdf>
-Package pdftex.def Info: figure.pdf  used on input line 100.
+Package pdftex.def Info: figure.pdf  used on input line 101.
 (pdftex.def)             Requested size: 99.82368pt x 94.33113pt.
 
 Overfull \vbox (4.68999pt too high) has occurred while \output is active []
 
  [3 <./figure.pdf>]
-LaTeX Font Info:    Trying to load font information for OT1+txtt on input line 162.
+LaTeX Font Info:    Trying to load font information for OT1+txtt on input line 163.
  (C:\Users\ginom\AppData\Local\Programs\MiKTeX\tex/latex/txfonts\ot1txtt.fd
 File: ot1txtt.fd 2000/12/15 v3.1
 )
@@ -600,8 +600,23 @@ pdfTeX warning: pdflatex (file ./logobottom.pdf): PDF inclusion: found PDF versi
 <logobottom.pdf, id=90, 266.20453pt x 76.19467pt>
 File: logobottom.pdf Graphic file (type pdf)
 <use logobottom.pdf>
-Package pdftex.def Info: logobottom.pdf  used on input line 171.
+Package pdftex.def Info: logobottom.pdf  used on input line 172.
 (pdftex.def)             Requested size: 132.13513pt x 37.82053pt.
+
+Underfull \hbox (badness 3271) in paragraph at lines 172--172
+[]\TS1/txr/m/n/12 ©\OT1/txr/m/n/12 2024 Gino Lu-ciano Moretta, li-censee AIMS Press.
+ []
+
+
+Underfull \hbox (badness 4673) in paragraph at lines 172--172
+\OT1/txr/m/n/12 This is an open ac-cess ar-ti-cle dis-tributed un-der the
+ []
+
+
+Underfull \hbox (badness 6927) in paragraph at lines 172--172
+\OT1/txr/m/n/12 terms of the Cre-ative Com-mons At-tri-bu-tion Li-cense
+ []
+
 
 Overfull \vbox (4.68999pt too high) has occurred while \output is active []
 
@@ -616,13 +631,13 @@ Package rerunfilecheck Info: File `QNTM.out' has not changed.
 Here is how much of TeX's memory you used:
  13516 strings out of 474486
  211353 string characters out of 5743754
- 1941542 words of memory out of 5000000
+ 1942542 words of memory out of 5000000
  35556 multiletter control sequences out of 15000+600000
  598342 words of font info for 131 fonts, out of 8000000 for 9000
  1142 hyphenation exceptions out of 8191
  90i,17n,93p,704b,534s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/public/txfonts/rtcxr.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/public/txfonts/rtxi.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/public/txfonts/rtxmi.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/public/txfonts/rtxr.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/public/txfonts/txsy.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/public/txfonts/txtt.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/urw/helvetic/uhvr8a.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmb8a.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmbi8a.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmr8a.pfb><C:/Users/ginom/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmri8a.pfb>
-Output written on QNTM.pdf (4 pages, 195825 bytes).
+Output written on QNTM.pdf (4 pages, 195857 bytes).
 PDF statistics:
  161 PDF objects out of 1000 (max. 8388607)
  32 named destinations out of 1000 (max. 500000)
