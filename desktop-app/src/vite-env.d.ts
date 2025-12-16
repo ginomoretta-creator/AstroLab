@@ -8,6 +8,7 @@ declare global {
             close: () => Promise<void>
             getBackendStatus: () => Promise<{ status: string; data?: any; error?: string }>
             getBackendPort: () => Promise<number>
+            restartBackend: () => Promise<{ status: string }>
             platform: string
         }
     }

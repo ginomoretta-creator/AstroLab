@@ -23,6 +23,9 @@ export interface StreamedResult {
     bestCost: number
     meanCost: number
     successRate: number
+    bestSchedule?: number[]
+    bestThrustFraction?: number
+    bestDistance?: number
 }
 
 class BackendAPI {
@@ -111,18 +114,41 @@ class BackendAPI {
                             // Validate required fields
                             if (typeof data.iteration !== 'number') continue
 
-                            // Ensure arrays are actual arrays
-                            const safeTrajectories = Array.isArray(data.trajectories) ? data.trajectories : []
-                            const safeBestTrajectory = Array.isArray(data.best_trajectory) ? data.best_trajectory : []
+                            // Deep validation helper
+                            const validateTrajectory = (traj: any[]): number[][] => {
+                                if (!Array.isArray(traj)) return []
+                                return traj.filter(p =>
+                                    Array.isArray(p) &&
+                                    p.length >= 2 &&
+                                    p.every(val => typeof val === 'number' && Number.isFinite(val))
+                                )
+                            }
+
+                            // Downsample helper to save memory (max 10000 points)
+                            const downsample = (points: number[][], target: number = 10000): number[][] => {
+                                if (points.length <= target) return points
+                                const step = Math.ceil(points.length / target)
+                                return points.filter((_, i) => i % step === 0 || i === points.length - 1)
+                            }
+
+                            const safeTrajectories = Array.isArray(data.trajectories)
+                                ? data.trajectories.map(validateTrajectory).filter((t: any[]) => t.length > 0).map((t: number[][]) => downsample(t))
+                                : []
+
+                            const safeBestTrajectory = validateTrajectory(data.best_trajectory)
+                            const downsampledBest = downsample(safeBestTrajectory)
 
                             onProgress({
                                 iteration: data.iteration || 0,
                                 totalIterations: data.total_iterations || request.numIterations,
                                 trajectories: safeTrajectories,
-                                bestTrajectory: safeBestTrajectory,
+                                bestTrajectory: downsampledBest,
                                 bestCost: typeof data.best_cost === 'number' ? data.best_cost : Infinity,
                                 meanCost: typeof data.mean_cost === 'number' ? data.mean_cost : Infinity,
                                 successRate: typeof data.success_rate === 'number' ? data.success_rate : 0,
+                                bestSchedule: Array.isArray(data.best_schedule) ? data.best_schedule.map((v: any) => Number(v) || 0) : undefined,
+                                bestThrustFraction: typeof data.best_thrust_fraction === 'number' ? data.best_thrust_fraction : undefined,
+                                bestDistance: typeof data.best_distance === 'number' ? data.best_distance : undefined,
                             })
                         } catch (e) {
                             console.warn('Failed to parse line:', line.substring(0, 100) + '...')
@@ -180,16 +206,17 @@ export function useBackend() {
         params,
         currentMethod,
         setStatus,
-        setIteration,
-        setResult,
+        addResult,
         addTrajectory,
         backendPort,
+        setBackendStatus,
+        setError,
     } = useSimulationStore()
 
     const startSimulation = async () => {
         backendAPI.setPort(backendPort)
+        setError(null)
         setStatus('running')
-        setIteration(0)
 
         const request: SimulationRequest = {
             method: currentMethod,
@@ -207,9 +234,8 @@ export function useBackend() {
         await backendAPI.startSimulation(
             request,
             (result) => {
-                setIteration(result.iteration)
-
                 // Add best trajectory for visualization
+                // It is already downsampled in onProgress
                 if (result.bestTrajectory.length > 0) {
                     addTrajectory({
                         points: result.bestTrajectory.map(p => [p[0], p[1]] as [number, number]),
@@ -218,13 +244,17 @@ export function useBackend() {
                     })
                 }
 
-                // Update result
-                setResult(currentMethod, {
+                // Update result and history
+                addResult(currentMethod, {
                     iteration: result.iteration,
                     totalIterations: result.totalIterations,
                     trajectories: result.trajectories,
                     bestTrajectory: result.bestTrajectory,
                     bestCost: result.bestCost,
+                    bestSchedule: result.bestSchedule,
+                    bestThrustFraction: result.bestThrustFraction,
+                    bestDistance: result.bestDistance,
+                    method: currentMethod
                 })
             },
             () => {
@@ -233,6 +263,8 @@ export function useBackend() {
             (error) => {
                 console.error('Simulation error:', error)
                 setStatus('error')
+                setBackendStatus('offline')
+                setError(error || 'Backend unreachable. Make sure the physics backend is running.')
             }
         )
     }

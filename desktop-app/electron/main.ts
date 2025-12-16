@@ -275,7 +275,13 @@ ipcMain.handle('backend:debug', () => {
 app.whenReady().then(async () => {
     log('App ready, starting backend...')
 
-    startPythonBackend()
+    // Start backend only if it's not already running
+    const alreadyOnline = await checkBackendHealth()
+    if (alreadyOnline) {
+        log('Backend already running, skipping spawn')
+    } else {
+        startPythonBackend()
+    }
 
     // Wait for backend to be ready
     let attempts = 0

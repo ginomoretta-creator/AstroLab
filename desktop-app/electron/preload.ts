@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Backend
     getBackendStatus: () => ipcRenderer.invoke('backend:status'),
     getBackendPort: () => ipcRenderer.invoke('backend:port'),
+    restartBackend: () => ipcRenderer.invoke('backend:restart'),
 
     // Platform info
     platform: process.platform,
@@ -24,6 +25,7 @@ declare global {
             close: () => Promise<void>
             getBackendStatus: () => Promise<{ status: string; data?: any; error?: string }>
             getBackendPort: () => Promise<number>
+            restartBackend: () => Promise<{ status: string }>
             platform: string
         }
     }

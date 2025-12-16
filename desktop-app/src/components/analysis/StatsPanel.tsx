@@ -63,13 +63,8 @@ export default function StatsPanel() {
             <div className="space-y-2">
                 <StatRow
                     icon={<Target className="w-3.5 h-3.5" />}
-                    label="Best Cost"
+                    label="Obj. Score"
                     value={currentResult?.bestCost?.toFixed(4) || '—'}
-                />
-                <StatRow
-                    icon={<Gauge className="w-3.5 h-3.5" />}
-                    label="Distance to Moon"
-                    value={currentResult?.bestCost ? `${(currentResult.bestCost * 384400).toFixed(0)} km` : '—'}
                 />
                 <StatRow
                     icon={<Clock className="w-3.5 h-3.5" />}

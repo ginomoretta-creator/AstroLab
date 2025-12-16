@@ -35,6 +35,7 @@ class TrajectoryResult(NamedTuple):
     """Result of trajectory propagation."""
     trajectory: jnp.ndarray      # (N+1, 5) states: [x, y, vx, vy, m]
     final_distance_to_moon: float
+    min_distance_to_moon: float  # Added for collision check
     final_velocity_magnitude: float
     total_fuel_used: float
     is_valid: bool               # True if trajectory didn't diverge
@@ -211,9 +212,20 @@ def propagate_trajectory_with_mass(
     """
     def step_fn(carry, i):
         state = carry
+        
+        # Check termination condition (distance > 1.5 * Earth-Moon distance)
+        # Position is relative to barycenter, but close enough to Earth for this check
+        # Earth is at (-mu, 0), so |pos| approx distance from Earth
+        dist_from_center = jnp.linalg.norm(state[:2])
+        is_escaped = dist_from_center > 1.5
+        
         thrust_on = thrust_schedule[i]
         current_thrust = thrust_on * thrust_magnitude
-        next_state = rk4_step_with_mass(state, dt, current_thrust, isp_normalized)
+        next_state_computed = rk4_step_with_mass(state, dt, current_thrust, isp_normalized)
+        
+        # If escaped, freeze state (effectively stopping simulation for this particle)
+        next_state = jnp.where(is_escaped, state, next_state_computed)
+        
         return next_state, state
     
     final_state, trajectory_history = jax.lax.scan(
@@ -246,8 +258,16 @@ def propagate_trajectory_4state(
     """
     def step_fn(carry, i):
         state = carry
+        
+        # Check termination condition
+        dist_from_center = jnp.linalg.norm(state[:2])
+        is_escaped = dist_from_center > 1.5
+        
         thrust_accel = thrust_schedule[i]
-        next_state = rk4_step_4state(state, dt, thrust_accel)
+        next_state_computed = rk4_step_4state(state, dt, thrust_accel)
+        
+        next_state = jnp.where(is_escaped, state, next_state_computed)
+        
         return next_state, state
     
     final_state, trajectory_history = jax.lax.scan(
@@ -485,7 +505,16 @@ def compute_trajectory_cost(
     else:
         fuel_used = 0.0
     
-    return weight_distance * dist_moon + weight_velocity * vel_mag + weight_fuel * fuel_used
+    # Minimum distance to Moon (Collision Check)
+    all_dists = jnp.linalg.norm(trajectory[:, :2] - MOON_POS, axis=1)
+    min_dist_moon = jnp.min(all_dists)
+    
+    # Collision Penalty
+    # If min_dist < R_MOON_NORM (surface impact), add massive penalty
+    # R_MOON_NORM is approx 0.0045 (~1737 km)
+    collision_penalty = jnp.where(min_dist_moon < R_MOON_NORM, 1e6, 0.0)
+    
+    return weight_distance * dist_moon + weight_velocity * vel_mag + weight_fuel * fuel_used + collision_penalty
 
 
 batch_compute_cost = jax.vmap(compute_trajectory_cost, in_axes=(0, None, None, None))
@@ -602,10 +631,11 @@ def get_parking_orbit_state(
     # In normalized units, GM_Earth ≈ 1-μ, ω = 1
     v_circ = jnp.sqrt((1 - MU) / r_norm)
     
-    # In rotating frame: subtract frame rotation
-    # vy_rotating = vy_inertial - x (since ω = 1 and rotation is about z)
+    # In rotating frame: subtract frame rotation at position x
+    # vy_rotating = vy_inertial - omega * x (since ω = 1 and rotation is about z)
+    # Note: x = -MU + r_norm, NOT just r_norm!
     vx = 0.0
-    vy = v_circ - r_norm  # Prograde in rotating frame
+    vy = v_circ - x  # FIXED: use x (the actual position), not r_norm
     
     # Mass (normalized to 1.0)
     m = 1.0

@@ -1,1 +1,268 @@
-"use strict";const o=require("electron"),g=require("child_process"),r=require("path"),b=require("fs"),P=require("url");var h=typeof document<"u"?document.currentScript:null;const l=r.dirname(P.fileURLToPath(typeof document>"u"?require("url").pathToFileURL(__filename).href:h&&h.tagName.toUpperCase()==="SCRIPT"&&h.src||new URL("main.js",document.baseURI).href));let a=null;const f=8080;let e=null;const u=!o.app.isPackaged;function t(n){console.log(`[ASL-Sandbox] ${n}`),e==null||e.webContents.executeJavaScript(`console.log('[Main] ${n.replace(/'/g,"\\'")}')`).catch(()=>{})}function m(){t(`isDev: ${u}`),t(`__dirname: ${l}`);const n=u?r.join(l,"../resources"):process.resourcesPath;t(`resourcesPath: ${n}`);const s=r.join(n,"backend","asl-sandbox-backend.exe");if(t(`Looking for bundled backend at: ${s}`),b.existsSync(s))return t("✅ Found bundled Python backend"),{executable:s,args:["--host","127.0.0.1","--port",f.toString()],cwd:r.dirname(s),found:!0};t("❌ Bundled backend not found");const d=u?r.join(l,"../.."):r.join(n,"../.."),i=r.join(d,"THRML-Sandbox","backend");return t(`Looking for dev backend at: ${i}`),b.existsSync(r.join(i,"server.py"))?(t("✅ Found development Python backend"),{executable:"python",args:["-m","uvicorn","server:app","--host","127.0.0.1","--port",f.toString()],cwd:i,found:!0}):(t("❌ No backend found!"),{executable:"",args:[],cwd:"",found:!1})}function w(){e=new o.BrowserWindow({width:1400,height:900,minWidth:1200,minHeight:700,frame:!1,backgroundColor:"#0a0a0f",webPreferences:{preload:r.join(l,"preload.js"),nodeIntegration:!1,contextIsolation:!0},show:!1}),e.once("ready-to-show",()=>{e==null||e.show()}),u?(e.loadURL("http://localhost:5173"),e.webContents.openDevTools({mode:"detach"})):e.loadFile(r.join(l,"../dist/index.html")),e.webContents.setWindowOpenHandler(({url:n})=>(o.shell.openExternal(n),{action:"deny"})),e.on("closed",()=>{e=null})}function y(){var s,d;const n=m();if(!n.found){t("Cannot start backend - no backend found");return}t("Starting Python backend..."),t(`Executable: ${n.executable}`),t(`Args: ${n.args.join(" ")}`),t(`CWD: ${n.cwd}`);try{const i=!n.executable.endsWith(".exe");a=g.spawn(n.executable,n.args,{cwd:n.cwd,shell:i,detached:!1,windowsHide:!0,env:{...process.env,PYTHONUNBUFFERED:"1"},stdio:["pipe","pipe","pipe"]}),(s=a.stdout)==null||s.on("data",c=>{const p=c.toString().trim();p&&t(`Backend stdout: ${p}`)}),(d=a.stderr)==null||d.on("data",c=>{const p=c.toString().trim();p&&t(`Backend stderr: ${p}`)}),a.on("error",c=>{t(`Backend spawn error: ${c.message}`)}),a.on("close",c=>{t(`Backend exited with code ${c}`),a=null}),t(`Backend process started with PID: ${a.pid}`)}catch(i){t(`Failed to spawn backend: ${i.message}`)}}function k(){if(a){if(t("Stopping Python backend..."),process.platform==="win32"&&a.pid)try{g.spawn("taskkill",["/pid",a.pid.toString(),"/f","/t"],{shell:!0})}catch{a.kill()}else a.kill("SIGTERM");a=null}}async function x(){try{return(await fetch(`http://127.0.0.1:${f}/`,{signal:AbortSignal.timeout(2e3)})).ok}catch{return!1}}o.ipcMain.handle("window:minimize",()=>{e==null||e.minimize()});o.ipcMain.handle("window:maximize",()=>{e!=null&&e.isMaximized()?e.unmaximize():e==null||e.maximize()});o.ipcMain.handle("window:close",()=>{e==null||e.close()});o.ipcMain.handle("backend:status",async()=>{if(await x())try{return{status:"online",data:await(await fetch(`http://127.0.0.1:${f}/`)).json()}}catch{return{status:"online",data:{}}}return{status:"offline",error:"Backend not responding"}});o.ipcMain.handle("backend:port",()=>f);o.ipcMain.handle("backend:restart",async()=>(k(),await new Promise(n=>setTimeout(n,1e3)),y(),{status:"restarting"}));o.ipcMain.handle("backend:debug",()=>{const n=m();return{isDev:u,resourcesPath:u?r.join(l,"../resources"):process.resourcesPath,...n,processRunning:a!==null,processPid:a==null?void 0:a.pid}});o.app.whenReady().then(async()=>{t("App ready, starting backend..."),y();let n=0;const s=30;for(;n<s;){if(await x()){t("Backend is ready!");break}await new Promise(i=>setTimeout(i,500)),n++,n%5===0&&t(`Still waiting for backend... (${n}/${s})`)}n>=s&&t("Backend did not start in time"),w(),o.app.on("activate",()=>{o.BrowserWindow.getAllWindows().length===0&&w()})});o.app.on("window-all-closed",()=>{k(),process.platform!=="darwin"&&o.app.quit()});o.app.on("before-quit",()=>{k()});const S=o.app.requestSingleInstanceLock();S?o.app.on("second-instance",()=>{e&&(e.isMinimized()&&e.restore(),e.focus())}):o.app.quit();
+"use strict";
+const electron = require("electron");
+const child_process = require("child_process");
+const path = require("path");
+const fs = require("fs");
+const url = require("url");
+var _documentCurrentScript = typeof document !== "undefined" ? document.currentScript : null;
+const __dirname$1 = path.dirname(url.fileURLToPath(typeof document === "undefined" ? require("url").pathToFileURL(__filename).href : _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("main.js", document.baseURI).href));
+let pythonProcess = null;
+const BACKEND_PORT = 8080;
+let mainWindow = null;
+const isDev = !electron.app.isPackaged;
+function log(message) {
+  console.log(`[ASL-Sandbox] ${message}`);
+  mainWindow == null ? void 0 : mainWindow.webContents.executeJavaScript(
+    `console.log('[Main] ${message.replace(/'/g, "\\'")}')`
+  ).catch(() => {
+  });
+}
+function getBackendPath() {
+  log(`isDev: ${isDev}`);
+  log(`__dirname: ${__dirname$1}`);
+  const resourcesPath = isDev ? path.join(__dirname$1, "../resources") : process.resourcesPath;
+  log(`resourcesPath: ${resourcesPath}`);
+  const bundledBackend = path.join(resourcesPath, "backend", "asl-sandbox-backend.exe");
+  log(`Looking for bundled backend at: ${bundledBackend}`);
+  if (fs.existsSync(bundledBackend)) {
+    log("✅ Found bundled Python backend");
+    return {
+      executable: bundledBackend,
+      args: ["--host", "127.0.0.1", "--port", BACKEND_PORT.toString()],
+      cwd: path.dirname(bundledBackend),
+      found: true
+    };
+  }
+  log("❌ Bundled backend not found");
+  const devProjectRoot = isDev ? path.join(__dirname$1, "../..") : path.join(resourcesPath, "../..");
+  const backendDir = path.join(devProjectRoot, "THRML-Sandbox", "backend");
+  log(`Looking for dev backend at: ${backendDir}`);
+  if (fs.existsSync(path.join(backendDir, "server.py"))) {
+    log("✅ Found development Python backend");
+    return {
+      executable: "python",
+      args: [
+        "-m",
+        "uvicorn",
+        "server:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        BACKEND_PORT.toString()
+      ],
+      cwd: backendDir,
+      found: true
+    };
+  }
+  log("❌ No backend found!");
+  return {
+    executable: "",
+    args: [],
+    cwd: "",
+    found: false
+  };
+}
+function createWindow() {
+  mainWindow = new electron.BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1200,
+    minHeight: 700,
+    frame: false,
+    backgroundColor: "#0a0a0f",
+    webPreferences: {
+      preload: path.join(__dirname$1, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    show: false
+  });
+  mainWindow.once("ready-to-show", () => {
+    mainWindow == null ? void 0 : mainWindow.show();
+  });
+  if (isDev) {
+    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  } else {
+    mainWindow.loadFile(path.join(__dirname$1, "../dist/index.html"));
+  }
+  mainWindow.webContents.setWindowOpenHandler(({ url: url2 }) => {
+    electron.shell.openExternal(url2);
+    return { action: "deny" };
+  });
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+}
+function startPythonBackend() {
+  var _a, _b;
+  const backendConfig = getBackendPath();
+  if (!backendConfig.found) {
+    log("Cannot start backend - no backend found");
+    return;
+  }
+  log("Starting Python backend...");
+  log(`Executable: ${backendConfig.executable}`);
+  log(`Args: ${backendConfig.args.join(" ")}`);
+  log(`CWD: ${backendConfig.cwd}`);
+  try {
+    const useShell = !backendConfig.executable.endsWith(".exe");
+    pythonProcess = child_process.spawn(backendConfig.executable, backendConfig.args, {
+      cwd: backendConfig.cwd,
+      shell: useShell,
+      detached: false,
+      windowsHide: true,
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: "1"
+      },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    (_a = pythonProcess.stdout) == null ? void 0 : _a.on("data", (data) => {
+      const output = data.toString().trim();
+      if (output) {
+        log(`Backend stdout: ${output}`);
+      }
+    });
+    (_b = pythonProcess.stderr) == null ? void 0 : _b.on("data", (data) => {
+      const output = data.toString().trim();
+      if (output) {
+        log(`Backend stderr: ${output}`);
+      }
+    });
+    pythonProcess.on("error", (err) => {
+      log(`Backend spawn error: ${err.message}`);
+    });
+    pythonProcess.on("close", (code) => {
+      log(`Backend exited with code ${code}`);
+      pythonProcess = null;
+    });
+    log(`Backend process started with PID: ${pythonProcess.pid}`);
+  } catch (error) {
+    log(`Failed to spawn backend: ${error.message}`);
+  }
+}
+function stopPythonBackend() {
+  if (pythonProcess) {
+    log("Stopping Python backend...");
+    if (process.platform === "win32" && pythonProcess.pid) {
+      try {
+        child_process.spawn("taskkill", ["/pid", pythonProcess.pid.toString(), "/f", "/t"], {
+          shell: true
+        });
+      } catch (e) {
+        pythonProcess.kill();
+      }
+    } else {
+      pythonProcess.kill("SIGTERM");
+    }
+    pythonProcess = null;
+  }
+}
+async function checkBackendHealth() {
+  try {
+    const response = await fetch(`http://127.0.0.1:${BACKEND_PORT}/`, {
+      signal: AbortSignal.timeout(2e3)
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+electron.ipcMain.handle("window:minimize", () => {
+  mainWindow == null ? void 0 : mainWindow.minimize();
+});
+electron.ipcMain.handle("window:maximize", () => {
+  if (mainWindow == null ? void 0 : mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow == null ? void 0 : mainWindow.maximize();
+  }
+});
+electron.ipcMain.handle("window:close", () => {
+  mainWindow == null ? void 0 : mainWindow.close();
+});
+electron.ipcMain.handle("backend:status", async () => {
+  const isOnline = await checkBackendHealth();
+  if (isOnline) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${BACKEND_PORT}/`);
+      const data = await response.json();
+      return { status: "online", data };
+    } catch {
+      return { status: "online", data: {} };
+    }
+  }
+  return { status: "offline", error: "Backend not responding" };
+});
+electron.ipcMain.handle("backend:port", () => {
+  return BACKEND_PORT;
+});
+electron.ipcMain.handle("backend:restart", async () => {
+  stopPythonBackend();
+  await new Promise((resolve) => setTimeout(resolve, 1e3));
+  startPythonBackend();
+  return { status: "restarting" };
+});
+electron.ipcMain.handle("backend:debug", () => {
+  const backendConfig = getBackendPath();
+  return {
+    isDev,
+    resourcesPath: isDev ? path.join(__dirname$1, "../resources") : process.resourcesPath,
+    ...backendConfig,
+    processRunning: pythonProcess !== null,
+    processPid: pythonProcess == null ? void 0 : pythonProcess.pid
+  };
+});
+electron.app.whenReady().then(async () => {
+  log("App ready, starting backend...");
+  const alreadyOnline = await checkBackendHealth();
+  if (alreadyOnline) {
+    log("Backend already running, skipping spawn");
+  } else {
+    startPythonBackend();
+  }
+  let attempts = 0;
+  const maxAttempts = 30;
+  while (attempts < maxAttempts) {
+    const isReady = await checkBackendHealth();
+    if (isReady) {
+      log("Backend is ready!");
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    attempts++;
+    if (attempts % 5 === 0) {
+      log(`Still waiting for backend... (${attempts}/${maxAttempts})`);
+    }
+  }
+  if (attempts >= maxAttempts) {
+    log("Backend did not start in time");
+  }
+  createWindow();
+  electron.app.on("activate", () => {
+    if (electron.BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+electron.app.on("window-all-closed", () => {
+  stopPythonBackend();
+  if (process.platform !== "darwin") {
+    electron.app.quit();
+  }
+});
+electron.app.on("before-quit", () => {
+  stopPythonBackend();
+});
+const gotTheLock = electron.app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  electron.app.quit();
+} else {
+  electron.app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}

@@ -42,13 +42,15 @@ export default function Sidebar() {
         backendStatus,
         setMethod,
         updateParams,
-        clearResults
+        clearResults,
+        setBackendStatus,
     } = useSimulationStore()
 
     const { startSimulation, stopSimulation } = useBackend()
 
     const [paramsExpanded, setParamsExpanded] = useState(true)
     const [advancedExpanded, setAdvancedExpanded] = useState(false)
+    const [isRestarting, setIsRestarting] = useState(false)
 
     const handleSimulation = async () => {
         if (status === 'running') {
@@ -59,6 +61,21 @@ export default function Sidebar() {
     }
 
     const isBackendReady = backendStatus === 'online'
+
+    const restartBackend = async () => {
+        if (!window.electronAPI?.restartBackend) return
+        setIsRestarting(true)
+        setBackendStatus('checking')
+        try {
+            await window.electronAPI.restartBackend()
+            // Give the process a moment to come back up
+            setTimeout(() => setBackendStatus('online'), 2000)
+        } catch (e) {
+            setBackendStatus('offline')
+        } finally {
+            setIsRestarting(false)
+        }
+    }
 
     return (
         <aside className="w-72 bg-theme-secondary border-r border-theme flex flex-col overflow-hidden">
@@ -77,8 +94,8 @@ export default function Sidebar() {
                                 key={method}
                                 onClick={() => setMethod(method)}
                                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isSelected
-                                        ? 'border'
-                                        : 'bg-theme-tertiary hover:bg-theme-elevated border border-transparent'
+                                    ? 'border'
+                                    : 'bg-theme-tertiary hover:bg-theme-elevated border border-transparent'
                                     }`}
                                 style={isSelected ? {
                                     backgroundColor: `color-mix(in srgb, var(${config.colorVar}) 20%, transparent)`,
@@ -113,7 +130,7 @@ export default function Sidebar() {
                                 label="Time Steps"
                                 value={params.numSteps}
                                 min={100}
-                                max={2000}
+                                max={120000}
                                 step={100}
                                 onChange={(v) => updateParams({ numSteps: v })}
                             />
@@ -184,9 +201,9 @@ export default function Sidebar() {
                             <ParameterSlider
                                 label="Time Step (dt)"
                                 value={params.dt}
-                                min={0.001}
-                                max={0.1}
-                                step={0.001}
+                                min={0.0001}
+                                max={0.01}
+                                step={0.0001}
                                 onChange={(v) => updateParams({ dt: v })}
                             />
                             <ParameterSlider
@@ -209,10 +226,10 @@ export default function Sidebar() {
                     onClick={handleSimulation}
                     disabled={!isBackendReady && status !== 'running'}
                     className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all ${!isBackendReady
-                            ? 'bg-theme-tertiary text-theme-muted cursor-not-allowed'
-                            : status === 'running'
-                                ? 'text-white'
-                                : 'text-white hover:brightness-110'
+                        ? 'bg-theme-tertiary text-theme-muted cursor-not-allowed'
+                        : status === 'running'
+                            ? 'text-white'
+                            : 'text-white hover:brightness-110'
                         }`}
                     style={{
                         backgroundColor: !isBackendReady
@@ -254,6 +271,16 @@ export default function Sidebar() {
                 >
                     <RotateCcw className="w-4 h-4" />
                     Clear Results
+                </button>
+
+                {/* Restart Backend */}
+                <button
+                    onClick={restartBackend}
+                    disabled={isRestarting}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-theme-tertiary hover:bg-theme-elevated text-theme-secondary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <RotateCcw className={`w-4 h-4 ${isRestarting ? 'animate-spin' : ''}`} />
+                    {isRestarting ? 'Restarting Backend...' : 'Restart Backend'}
                 </button>
             </div>
         </aside>

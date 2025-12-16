@@ -4,9 +4,10 @@ import Sidebar from './components/layout/Sidebar'
 import MainContent from './components/layout/MainContent'
 import { useSimulationStore } from './stores/simulationStore'
 import { initializeTheme } from './stores/themeStore'
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 
 function App() {
-    const { setBackendStatus, setBackendPort } = useSimulationStore()
+    const { setBackendStatus, setBackendPort, errorMessage, setError } = useSimulationStore()
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
@@ -23,6 +24,7 @@ function App() {
                 setBackendStatus(status?.status === 'online' ? 'online' : 'offline')
             } catch (error) {
                 setBackendStatus('offline')
+                setError('Backend unreachable. Please start the bundled backend or run `python server.py` in THRML-Sandbox/backend.')
             } finally {
                 setIsLoading(false)
             }
@@ -60,13 +62,29 @@ function App() {
     }
 
     return (
-        <div className="h-screen bg-theme-primary flex flex-col overflow-hidden">
-            <TitleBar />
-            <div className="flex-1 flex overflow-hidden">
-                <Sidebar />
-                <MainContent />
+        <ErrorBoundary>
+            <div className="h-screen bg-theme-primary flex flex-col overflow-hidden relative">
+                <TitleBar />
+                <div className="flex-1 flex overflow-hidden">
+                    <Sidebar />
+                    <MainContent />
+                </div>
+                {errorMessage && (
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+                        <div className="glass px-4 py-3 rounded-lg flex items-center gap-3 text-sm shadow-lg">
+                            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--accent-red)' }}></div>
+                            <span className="text-theme-primary">{errorMessage}</span>
+                            <button
+                                onClick={() => setError(null)}
+                                className="ml-2 text-theme-secondary hover:text-theme-primary text-xs"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
+        </ErrorBoundary>
     )
 }
 

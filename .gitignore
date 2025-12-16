@@ -23,3 +23,11 @@ Thumbs.db
 desktop-app/release/
 desktop-app/release-packager/
 desktop-app/resources/backend/asl-sandbox-backend.exe
+*.exe
+*.bak
+
+# Nested Build Artifacts
+**/dist/
+**/build/
+**/.venv/
+**/__pycache__/
