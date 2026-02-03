@@ -1,0 +1,151 @@
+\documentclass[10pt,twocolumn,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{color,array,amsthm}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{labelfont=bf, size=footnotesize}
+\usepackage{multirow}
+\setcounter{page}{1}
+\usepackage[spanish]{babel}
+\usepackage{amssymb}
+\usepackage[table]{xcolor}
+\renewcommand{\tablename}{Tabla}
+\usepackage{stackrel}
+\usepackage{tikz}
+\usetikzlibrary{positioning,calc,decorations.pathreplacing,calligraphy,automata}
+\usepackage[numbers]{natbib} 
+
+% Definitions
+\def\eqdef{:=}
+\def\fin{\nolinebreak\begin{tabbing} \` $\Box$\end{tabbing}}
+\def\sign{\mbox{sign }}
+\def\v0{\underline 0}
+\def\C{\mbox{{\sc C} \kern-0.9em\raise.75ex\hbox{$_|$}}\ }
+\def\R{\mbox{{\sc R} \kern-1.15em\raise.8ex\hbox{$_|$}}\ \,}
+\newtheorem{teo}{Theorem}[section]
+\newtheorem{lem}{Lemma}[section]
+\newtheorem{lemap}{Lemma}
+\newtheorem{rem}{{\bf Remark}}[section]
+\newtheorem{alg}{{\bf Algorithm}}[section]
+\newtheorem{cor}{{\bf Corollary}}[section]
+\newtheorem{exam}{Example}[section]
+\newtheorem{defin}{Definition}[section]
+\newtheorem{pro}{Theorem}[section]
+\newtheorem{prop}{Property}[section]
+\newtheorem{ass}{\bf Assumption}[section]
+
+% Tikz styles
+\tikzstyle{tabla} = [draw=black, rectangle, anchor=north west, minimum height=0.9cm, minimum width=3.4cm]
+\tikzstyle{tabladot} = [draw=black, rectangle, anchor=north west, minimum height=0.9cm, minimum width=2cm]
+\tikzstyle{tablita} = [draw=black, rectangle, anchor=north west, minimum height=0.9cm, minimum width=2.5cm]
+\newcommand{\Plus}{\mathord{\begin{tikzpicture}[baseline=0ex, line width=1, scale=0.13]
+    \draw (1,0) -- (1,2);
+    \draw (0,1) -- (2,1);
+\end{tikzpicture}}}
+
+% Keywords custom command since article doesn't have it
+\newcommand{\keywords}[1]{\par\vspace{0.5em}\noindent\textbf{\MakeUppercase{Palabras clave}:} #1}
+
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+
+% More definitions
+\def\eqdef{\buildrel \triangle \over =}
+\def\fin{\nopagebreak\begin{tabbing} \` $\Box$\end{tabbing}}
+\def\sign{\mbox{sign }}
+\def\v0{\underline 0}
+\def\C{\mbox{{\sc C} \kern-0.9em\raise.75ex\hbox{$_|$}}\ }
+\def\R{\mbox{{\sc R} \kern-1.15em\raise.8ex\hbox{$_|$}}\ \,}
+\def\ic{i=1,\ldots ,4}
+\def\kc{k=1,\ldots ,4}
+\def\iN{i=1,\ldots ,n}
+\def\gr{^\circ}
+
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\pagestyle{fancy}
+\fancyhf{} % Clear header/footer
+\fancyhead[R]{\thepage} % Page number top right
+\renewcommand{\headrulewidth}{0pt} % No header line
+
+% Title data
+\title{\textbf{Diseño Conceptual de un Propulsor de Efecto Hall para el CubeSat Académico NANO 70/30}}
+
+\author{Gino Moretta$^*$, Juan Pablo Saldía, Walkiria Schulz\\ 
+\vspace{2mm} \\ 
+{\small Departamento de Ingeniería Aeroespacial,} \\ 
+{\small Facultad de Ciencias Exactas, Físicas y Naturales,} \\ 
+{\small Universidad Nacional de Córdoba.} \\ 
+\vspace{3mm} \\ 
+\small $^*$Contacto: gino.moretta@mi.unc.edu.ar}
+
+\date{} % No date
+
+\begin{document}
+
+\definecolor{gris-claro}{RGB}{240,240,240}
+\definecolor{gris-osc}{RGB}{220,220,220}
+
+\twocolumn[
+\begin{@twocolumnfalse}
+\maketitle
+\begin{abstract} 
+\large % Set abstract text to 12pt (approx relative to 10pt base)
+\noindent \textbf{\MakeUppercase{Resumen.}} El desarrollo de pequeños satélites ha permitido realizar misiones cada vez más ambiciosas, tanto individualmente como en sistemas distribuidos de satélites. Para alcanzar estos objetivos, se requiere un sistema de propulsión eficiente, capaz de extender la vida útil de la misión, evitar colisiones, alcanzar o reconfigurar la órbita de misión y/o realizar maniobras de desorbitado al final del ciclo operativo. Este trabajo presenta el diseño conceptual de un propulsor de efecto Hall orientado al Cubesat académico Nano 70/30. Se presenta el diseño proveniente de un método de escalado y evaluado mediante un código computacional con capacidades de modelado del flujo de plasma. Se presentan y discuten además aspectos del diseño del circuito magnético, selección de materiales y consideraciones de manufactura. El objetivo final es que el propulsor cumpla los requerimientos de empuje de plataformas ligeras tipo 12U, entre las que se encuadra el Cubesat Nano 70/30.  
+\end{abstract} 
+\keywords{Cubesat, Propulsión eléctrica, Propulsor de Efecto Hall, Flujo de plasma.}
+\vspace{1cm}
+\end{@twocolumnfalse}
+]
+
+%%%%%%%%%%%%%%
+% Introducción
+%%%%%%%%%%%%%%
+
+\section{\bf INTRODUCCIÓN}
+El creciente desarrollo e implementación de pequeños satélites ha transformado la forma en que se diseñan y ejecutan misiones espaciales. Los CubeSats han emergido como una solución eficiente para llevar a cabo misiones científicas, tecnológicas y de telecomunicaciones, tanto de manera individual como en sistemas distribuidos de satélites. Este avance tecnológico impone nuevos desafíos, especialmente en el ámbito de la propulsión, donde se requieren sistemas que ofrezcan alta eficiencia para extender la vida útil, corregir trayectorias, mantener configuraciones orbitales y asegurar, llegado el caso, un desorbitado controlado \cite{GINO}.
+
+En este contexto, el presente trabajo tiene como objetivo desarrollar el diseño conceptual de un sistema de propulsión basado en un propulsor de efecto Hall, orientado específicamente al CubeSat académico Nano 70/30: un satélite estándar 12U actualmente en desarrollo en la Universidad Nacional de Córdoba (UNC). Un sistema de propulsión eficiente permitiría realizar maniobras precisas con un consumo energético reducido.
+
+Se diseñará el propulsor, llamémosle \textbf{P70/30}, a partir de un método de escalado \cite{MISURI} y luego, mediante simulaciones unidimensionales \cite{JULIA} se realizará la modelización y calibración del desempeño del flujo de plasma dentro del mismo, optimizando así el circuito electromagnético.
+
+El resultado esperado es el diseño de un sistema de propulsión compacto, eficiente y adaptable, que permita ampliar las capacidades operativas del Nano 70/30. Con ello, se busca contribuir al desarrollo de tecnologías espaciales avanzadas en el ámbito académico y proporcionar datos clave para futuras misiones con CubeSats de configuración similar.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.48\textwidth]{SSEA.png}
+    \caption{Relación entre el flujo másico y el empuje para distintos valores de voltaje, para el P70/30 con xenón (negro) y criptón (rojo), como resultado de la simulación unidimensional.}
+    \label{5}
+\end{figure}
+
+\begin{table}[h]
+    \centering
+    \renewcommand{\arraystretch}{1.2}
+    \caption{Resultados de la simulación unidimensional, para el P70/30 con xenón (Xe) y criptón (Kr).}
+    \begin{tabular}{c|c|c|c|c|c|c}
+        \rowcolor{gris-claro}
+        & $F$[N] & $\Dot{m}$[mg/s] & $V_d$[V] & $W_d$[W] & $I_{sp}$[s] & $\eta$ \\
+        \midrule
+        P70/30 & 0.010 & 0.85 (Xe) & 200 & 174 & 1199 & 0.34 \\
+        P70/30 & 0.010 & 0.92  (Kr) & 200 & 196 & 1108 & 0.28 \\
+    \end{tabular}
+    \label{xenon}
+\end{table}
+
+
+\section{\bf CONCLUSIONES}
+
+\begin{thebibliography}{0}
+
+\bibitem{GINO} Moretta G., Adolfo Rizzo, Leonardo Giurdanella, Pablo Servidia y Brian Parola { ``Feasibility Analysis of a Hall Effect Propulsion System for a Highly Elliptical Orbit Acquisition on a 12U CubeSat''}, International Academy of Astronautics Latin American Conference on Small Satellites Technologies and Applications, Salta, Argentina. (2024).
+%1
+\bibitem{MISURI} Misuri T., Battista F., Barbieri C., De Marco E. y Andrenucci M., {``High power Hall thrusters design options''}, 30th International Electric Propulsion Conference. (2007).
+%2
+\bibitem{JULIA} Julia, {``Reference for Julia simulation''} % Added placeholder for missing citation JULIA found in text
+\end{thebibliography}
+
+\end{document}

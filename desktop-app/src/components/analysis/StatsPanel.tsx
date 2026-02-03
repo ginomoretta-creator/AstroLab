@@ -1,5 +1,5 @@
 import { useSimulationStore } from '../../stores/simulationStore'
-import { Zap, Atom, Shuffle, Target, Gauge, Clock, TrendingDown } from 'lucide-react'
+import { Zap, Atom, Target, Clock, TrendingDown } from 'lucide-react'
 
 export default function StatsPanel() {
     const { status, currentMethod, currentIteration, params, results } = useSimulationStore()
@@ -7,9 +7,8 @@ export default function StatsPanel() {
     const currentResult = results[currentMethod]
 
     const methodIcons = {
-        thrml: <Zap className="w-4 h-4" style={{ color: 'var(--accent-purple)' }} />,
-        quantum: <Atom className="w-4 h-4" style={{ color: 'var(--accent-cyan)' }} />,
-        random: <Shuffle className="w-4 h-4" style={{ color: 'var(--accent-orange)' }} />,
+        classical: <Zap className="w-4 h-4" style={{ color: 'var(--accent-purple)' }} />,
+        hybrid: <Atom className="w-4 h-4" style={{ color: 'var(--accent-cyan)' }} />,
     }
 
     const statusColors = {
@@ -74,34 +73,26 @@ export default function StatsPanel() {
             </div>
 
             {/* Comparison Summary */}
-            {(results.thrml || results.quantum || results.random) && (
+            {(results.classical || results.hybrid) && (
                 <div className="pt-3 border-t border-theme space-y-2">
                     <div className="flex items-center gap-1.5 text-xs font-medium text-theme-muted mb-2">
                         <TrendingDown className="w-3.5 h-3.5" />
                         Method Comparison
                     </div>
-                    {results.thrml && (
+                    {results.classical && (
                         <CompareRow
-                            method="THRML"
-                            cost={results.thrml.bestCost}
+                            method="Classical"
+                            cost={results.classical.bestCost}
                             colorVar="--accent-purple"
-                            isBest={findBestMethod() === 'thrml'}
+                            isBest={findBestMethod() === 'classical'}
                         />
                     )}
-                    {results.quantum && (
+                    {results.hybrid && (
                         <CompareRow
-                            method="Quantum"
-                            cost={results.quantum.bestCost}
+                            method="Hybrid"
+                            cost={results.hybrid.bestCost}
                             colorVar="--accent-cyan"
-                            isBest={findBestMethod() === 'quantum'}
-                        />
-                    )}
-                    {results.random && (
-                        <CompareRow
-                            method="Random"
-                            cost={results.random.bestCost}
-                            colorVar="--accent-orange"
-                            isBest={findBestMethod() === 'random'}
+                            isBest={findBestMethod() === 'hybrid'}
                         />
                     )}
                 </div>
@@ -110,7 +101,7 @@ export default function StatsPanel() {
     )
 
     function findBestMethod() {
-        const methods = ['thrml', 'quantum', 'random'] as const
+        const methods = ['classical', 'hybrid'] as const
         let best = null
         let bestCost = Infinity
 

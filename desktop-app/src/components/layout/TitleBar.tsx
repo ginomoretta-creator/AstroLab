@@ -19,7 +19,7 @@ export default function TitleBar() {
                     <Rocket className="w-4 h-4 text-white" />
                 </div>
                 <span className="font-semibold text-sm text-theme-primary">ASL-Sandbox</span>
-                <span className="text-xs text-theme-muted">v1.0.0</span>
+                <span className="text-xs text-theme-muted">v2.1.1</span>
             </div>
 
             {/* Center - Backend Status & Theme Toggle */}

@@ -10,7 +10,8 @@ export interface SimulationRequest {
     mass: number
     thrust: number
     isp: number
-    initialAltitude: number
+    apogeeAltitude: number
+    perigeeAltitude: number
     dt: number
     numIterations: number
 }
@@ -26,6 +27,18 @@ export interface StreamedResult {
     bestSchedule?: number[]
     bestThrustFraction?: number
     bestDistance?: number
+    metrics?: {
+        deltaV?: number
+        deltaV_numerical?: number
+        fuelConsumed?: number
+        timeOfFlight?: number
+        costBreakdown?: {
+            distance: number
+            velocity: number
+            fuel: number
+            capture_bonus: number
+        }
+    }
 }
 
 class BackendAPI {
@@ -71,7 +84,8 @@ class BackendAPI {
                     mass: request.mass,
                     thrust: request.thrust,
                     isp: request.isp,
-                    initial_altitude: request.initialAltitude,
+                    apogee_altitude: request.apogeeAltitude,
+                    perigee_altitude: request.perigeeAltitude,
                     dt: request.dt,
                     num_iterations: request.numIterations,
                     method: request.method,
@@ -111,8 +125,19 @@ class BackendAPI {
                         try {
                             const data = JSON.parse(line)
 
+                            // Check for error messages from backend
+                            if (data.error) {
+                                console.error('[Backend Error]', data.error)
+                                if (data.traceback) console.error(data.traceback)
+                                onError(data.error)
+                                return
+                            }
+
                             // Validate required fields
-                            if (typeof data.iteration !== 'number') continue
+                            if (typeof data.iteration !== 'number') {
+                                console.warn('[Validation] Skipping line - no iteration number:', data)
+                                continue
+                            }
 
                             // Deep validation helper
                             const validateTrajectory = (traj: any[]): number[][] => {
@@ -138,6 +163,8 @@ class BackendAPI {
                             const safeBestTrajectory = validateTrajectory(data.best_trajectory)
                             const downsampledBest = downsample(safeBestTrajectory)
 
+                            console.log(`[${data.method?.toUpperCase()}] Iter ${data.iteration}/${data.total_iterations}: ${safeTrajectories.length} trajs, best=${downsampledBest.length} pts, dist=${data.best_distance?.toFixed(4)}`)
+
                             onProgress({
                                 iteration: data.iteration || 0,
                                 totalIterations: data.total_iterations || request.numIterations,
@@ -149,6 +176,13 @@ class BackendAPI {
                                 bestSchedule: Array.isArray(data.best_schedule) ? data.best_schedule.map((v: any) => Number(v) || 0) : undefined,
                                 bestThrustFraction: typeof data.best_thrust_fraction === 'number' ? data.best_thrust_fraction : undefined,
                                 bestDistance: typeof data.best_distance === 'number' ? data.best_distance : undefined,
+                                metrics: data.metrics ? {
+                                    deltaV: data.metrics.deltaV,
+                                    deltaV_numerical: data.metrics.deltaV_numerical,
+                                    fuelConsumed: data.metrics.fuelConsumed,
+                                    timeOfFlight: data.metrics.timeOfFlight,
+                                    costBreakdown: data.metrics.costBreakdown
+                                } : undefined,
                             })
                         } catch (e) {
                             console.warn('Failed to parse line:', line.substring(0, 100) + '...')
@@ -226,7 +260,8 @@ export function useBackend() {
             mass: params.mass,
             thrust: params.thrust,
             isp: params.isp,
-            initialAltitude: params.initialAltitude,
+            apogeeAltitude: params.apogeeAltitude,
+            perigeeAltitude: params.perigeeAltitude,
             dt: params.dt,
             numIterations: params.numIterations,
         }
@@ -254,7 +289,8 @@ export function useBackend() {
                     bestSchedule: result.bestSchedule,
                     bestThrustFraction: result.bestThrustFraction,
                     bestDistance: result.bestDistance,
-                    method: currentMethod
+                    method: currentMethod,
+                    metrics: result.metrics
                 })
             },
             () => {

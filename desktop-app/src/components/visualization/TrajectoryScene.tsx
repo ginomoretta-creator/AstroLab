@@ -36,12 +36,12 @@ export default function TrajectoryScene() {
             <OrbitReference theme={theme} />
 
             {/* Historical trajectories (faded background) */}
-            {trajectoryHistory.slice(-20).map((traj, index) => (
+            {trajectoryHistory.slice(-10).map((traj, index) => (
                 <TrajectoryPath
                     key={index}
                     points={traj.points}
                     color={getMethodColor(traj.method)}
-                    opacity={0.4}
+                    opacity={0.15}
                     simple={true}
                 />
             ))}
@@ -52,7 +52,7 @@ export default function TrajectoryScene() {
                     points={displayResult.bestTrajectory.map(p => [p[0], p[1]] as [number, number])}
                     color={getMethodColor(displayMethod)}
                     opacity={1}
-                    lineWidth={3}
+                    lineWidth={1.5}
                     glow={false}
                 />
             )}
@@ -157,7 +157,7 @@ interface TrajectoryPathProps {
     simple?: boolean
 }
 
-function TrajectoryPath({ points, color, opacity = 1, lineWidth = 2, simple = false }: TrajectoryPathProps) {
+function TrajectoryPath({ points, color, opacity = 1, lineWidth = 1.5, simple = false }: TrajectoryPathProps) {
     const geometry = useMemo(() => {
         if (!Array.isArray(points) || points.length < 2) return null
         const validPoints = points.filter(p =>
@@ -177,9 +177,13 @@ function TrajectoryPath({ points, color, opacity = 1, lineWidth = 2, simple = fa
 
     if (simple) {
         return (
-            <line geometry={geometry as THREE.BufferGeometry}>
-                <lineBasicMaterial color={color} opacity={opacity} transparent linewidth={1} />
-            </line>
+            <primitive object={new THREE.Line(geometry as THREE.BufferGeometry, new THREE.LineBasicMaterial({
+                color,
+                opacity,
+                transparent: opacity < 1,
+                depthWrite: opacity >= 1,
+                depthTest: true
+            }))} />
         )
     }
 
@@ -189,8 +193,10 @@ function TrajectoryPath({ points, color, opacity = 1, lineWidth = 2, simple = fa
                 points={geometry as [number, number, number][]}
                 color={color}
                 lineWidth={lineWidth}
-                transparent
+                transparent={opacity < 1}
                 opacity={opacity}
+                depthWrite={opacity >= 1}
+                depthTest={true}
             />
         </group>
     )
@@ -198,9 +204,8 @@ function TrajectoryPath({ points, color, opacity = 1, lineWidth = 2, simple = fa
 
 function getMethodColor(method: string | undefined): string {
     switch (method) {
-        case 'thrml': return '#8b5cf6'
-        case 'quantum': return '#06b6d4'
-        case 'random': return '#f59e0b'
-        default: return '#8b5cf6' // Default to purple if undefined
+        case 'classical': return '#8b5cf6' // Purple
+        case 'hybrid': return '#06b6d4'    // Cyan
+        default: return '#8b5cf6'          // Default to purple
     }
 }

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
 
 export default function ScheduleVisualization() {
-    const { results, currentMethod, params, status, selectedResult } = useSimulationStore()
+    const { results, currentMethod, selectedResult } = useSimulationStore()
 
     const displayResult = selectedResult || results[currentMethod]
     const method = selectedResult?.method || currentMethod
@@ -74,9 +74,8 @@ export default function ScheduleVisualization() {
 
     const getColor = () => {
         switch (method) {
-            case 'thrml': return 'bg-[var(--accent-purple)]'
-            case 'quantum': return 'bg-[var(--accent-cyan)]'
-            case 'random': return 'bg-[var(--accent-orange)]'
+            case 'classical': return 'bg-[var(--accent-purple)]'
+            case 'hybrid': return 'bg-[var(--accent-cyan)]'
             default: return 'bg-theme-secondary'
         }
     }

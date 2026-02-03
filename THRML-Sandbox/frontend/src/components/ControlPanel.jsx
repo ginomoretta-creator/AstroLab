@@ -16,7 +16,7 @@ export function ControlPanel({ params, setParams, onSimulate, isSimulating }) {
             <div className="space-y-4">
                 {/* Method Selection */}
                 <div className="flex bg-black/40 rounded-lg p-1">
-                    {['thrml', 'classical'].map((m) => (
+                    {['classical', 'hybrid'].map((m) => (
                         <button
                             key={m}
                             onClick={() => setParams(prev => ({ ...prev, method: m }))}

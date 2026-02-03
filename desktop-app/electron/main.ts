@@ -254,8 +254,39 @@ ipcMain.handle('backend:port', () => {
 })
 
 ipcMain.handle('backend:restart', async () => {
+    log('Restart requested...')
     stopPythonBackend()
-    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    // Wait for port to be released (Windows needs more time)
+    // Also kill any uvicorn processes that might be lingering
+    if (process.platform === 'win32') {
+        try {
+            // Kill any python/uvicorn on port 8080
+            const { exec } = require('child_process')
+            exec('netstat -ano | findstr :8080', (err: any, stdout: string) => {
+                if (stdout) {
+                    const lines = stdout.split('\n')
+                    lines.forEach((line: string) => {
+                        const match = line.match(/LISTENING\s+(\d+)/)
+                        if (match) {
+                            const pid = match[1]
+                            log(`Killing process ${pid} using port 8080`)
+                            exec(`taskkill /F /PID ${pid}`)
+                        }
+                    })
+                }
+            })
+        } catch (e) {
+            log('Error killing port 8080 processes: ' + e)
+        }
+    }
+
+    // Wait 5 seconds for processes to fully die and ports to be released
+    await new Promise(resolve => setTimeout(resolve, 5000))
+
+    // Force clear the process reference
+    pythonProcess = null
+    log('Now starting backend...')
     startPythonBackend()
     return { status: 'restarting' }
 })
