@@ -49,7 +49,7 @@ export default function TrajectoryScene() {
             {/* Best trajectory highlight (Selected or Current) */}
             {displayResult?.bestTrajectory && displayResult.bestTrajectory.length > 0 && (
                 <TrajectoryPath
-                    points={displayResult.bestTrajectory.map(p => [p[0], p[1]] as [number, number])}
+                    points={displayResult.bestTrajectory as any}
                     color={getMethodColor(displayMethod)}
                     opacity={1}
                     lineWidth={1.5}
@@ -62,6 +62,15 @@ export default function TrajectoryScene() {
                 args={[4, 20, theme === 'dark' ? '#333' : '#ccc', theme === 'dark' ? '#222' : '#eee']}
                 rotation={[Math.PI / 2, 0, 0]}
             />
+
+            {/* Z-axis grid for 3D mode */}
+            {displayResult?.dimension === 3 && (
+                <gridHelper
+                    args={[4, 20, theme === 'dark' ? '#333' : '#ccc', theme === 'dark' ? '#222' : '#eee']}
+                    rotation={[0, 0, Math.PI / 2]}
+                    position={[0, 0, 0]}
+                />
+            )}
         </group>
     )
 }
@@ -160,16 +169,40 @@ interface TrajectoryPathProps {
 function TrajectoryPath({ points, color, opacity = 1, lineWidth = 1.5, simple = false }: TrajectoryPathProps) {
     const geometry = useMemo(() => {
         if (!Array.isArray(points) || points.length < 2) return null
+
+        // Support both 2D [x, y] and 3D+ [x, y, z, ...] points
         const validPoints = points.filter(p =>
-            Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])
+            Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])
         )
         if (validPoints.length < 2) return null
 
         if (simple) {
-            const points3D = validPoints.map(p => new THREE.Vector3(p[0], p[1], 0))
+            const points3D = validPoints.map(p => {
+                // Handle both 2D and 3D+ state vectors
+                if (p.length >= 7) {
+                    // 3D state: [x, y, z, vx, vy, vz, m]
+                    return new THREE.Vector3(p[0], p[1], p[2])
+                } else if (p.length >= 3) {
+                    // Already has z component
+                    return new THREE.Vector3(p[0], p[1], p[2])
+                } else {
+                    // 2D state: [x, y, vx, vy, (m)]
+                    return new THREE.Vector3(p[0], p[1], 0)
+                }
+            })
             return new THREE.BufferGeometry().setFromPoints(points3D)
         } else {
-            return validPoints.map(p => [p[0], p[1], 0] as [number, number, number])
+            return validPoints.map(p => {
+                if (p.length >= 7) {
+                    // 3D state: [x, y, z, vx, vy, vz, m]
+                    return [p[0], p[1], p[2]] as [number, number, number]
+                } else if (p.length >= 3) {
+                    return [p[0], p[1], p[2]] as [number, number, number]
+                } else {
+                    // 2D state
+                    return [p[0], p[1], 0] as [number, number, number]
+                }
+            })
         }
     }, [points, simple])
 

@@ -184,6 +184,42 @@ export default function Sidebar() {
                     </button>
                     {advancedExpanded && (
                         <div className="space-y-4 fade-in">
+                            {/* 3D Mode Toggle */}
+                            <div className="flex items-center gap-2 p-3 bg-theme-tertiary rounded-lg">
+                                <input
+                                    type="checkbox"
+                                    id="enable3D"
+                                    checked={params.enable3D}
+                                    onChange={(e) => updateParams({ enable3D: e.target.checked })}
+                                    className="w-4 h-4"
+                                />
+                                <label htmlFor="enable3D" className="text-sm font-medium cursor-pointer">
+                                    Enable 3D Trajectories
+                                </label>
+                            </div>
+
+                            {/* 3D-specific parameters */}
+                            {params.enable3D && (
+                                <>
+                                    <ParameterSlider
+                                        label="Inclination (deg)"
+                                        value={params.inclinationDeg}
+                                        min={0}
+                                        max={90}
+                                        step={1}
+                                        onChange={(v) => updateParams({ inclinationDeg: v })}
+                                    />
+                                    <ParameterSlider
+                                        label="RAAN (deg)"
+                                        value={params.raanDeg}
+                                        min={0}
+                                        max={360}
+                                        step={5}
+                                        onChange={(v) => updateParams({ raanDeg: v })}
+                                    />
+                                </>
+                            )}
+
                             <ParameterSlider
                                 label="Apogee Altitude (km)"
                                 value={params.apogeeAltitude}
