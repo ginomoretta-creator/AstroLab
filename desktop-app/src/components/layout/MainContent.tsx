@@ -1,20 +1,27 @@
 import { useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Stars, PerspectiveCamera } from '@react-three/drei'
-import { BarChart3, Moon, History, Activity } from 'lucide-react'
+import { Moon, History, Activity, Database, TrendingDown, BarChart3, Download } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
+import { useSimulationStore } from '../../stores/simulationStore'
 import TrajectoryScene from '../visualization/TrajectoryScene'
 import StatsPanel from '../analysis/StatsPanel'
 import ScheduleVisualization from '../analysis/ScheduleVisualization'
 import IterationHistory from '../analysis/IterationHistory'
+import RunManager from '../analysis/RunManager'
+import MetricsPanel from '../analysis/MetricsPanel'
+import ComparisonDashboard from '../analysis/ComparisonDashboard'
+import ExportModal from '../analysis/ExportModal'
 import FloatingPanel from '../common/FloatingPanel'
 import LunarAnalysis from '../analysis/LunarAnalysis'
 import { ErrorBoundary } from '../common/ErrorBoundary'
 
 export default function MainContent() {
     const { theme } = useThemeStore()
-    const [activeTab, setActiveTab] = useState<'schedule' | 'history'>('schedule')
+    const { currentMethod, selectedRuns } = useSimulationStore()
+    const [activeTab, setActiveTab] = useState<'schedule' | 'history' | 'runs' | 'metrics' | 'compare'>('schedule')
     const [isLunarPanelOpen, setIsLunarPanelOpen] = useState(false)
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false)
 
     // Adjust star visibility based on theme
     const showStars = theme === 'dark'
@@ -86,12 +93,8 @@ export default function MainContent() {
                         <span className="text-theme-secondary">Moon</span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'var(--accent-purple)' }}></div>
-                        <span className="text-theme-secondary">THRML Trajectory</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'var(--accent-cyan)' }}></div>
-                        <span className="text-theme-secondary">Quantum Trajectory</span>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: currentMethod === 'classical' ? 'var(--accent-purple)' : 'var(--accent-cyan)' }}></div>
+                        <span className="text-theme-secondary capitalize">{currentMethod} Trajectory</span>
                     </div>
                 </div>
 
@@ -105,43 +108,112 @@ export default function MainContent() {
             <div className="h-64 border-t border-theme bg-theme-secondary flex flex-col z-20">
                 {/* Tabs & Toolbar */}
                 <div className="flex items-center justify-between border-b border-theme bg-theme-secondary pr-2">
-                    <div className="flex">
-                        <button
+                    <div className="flex overflow-x-auto">
+                        <TabButton
+                            active={activeTab === 'schedule'}
                             onClick={() => setActiveTab('schedule')}
-                            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeTab === 'schedule'
-                                ? 'bg-theme-tertiary text-theme-primary border-r border-theme'
-                                : 'text-theme-muted hover:text-theme-primary hover:bg-theme-elevated'
-                                }`}
-                        >
-                            <Activity className="w-4 h-4" />
-                            Thrust Schedule
-                        </button>
-                        <button
+                            icon={<Activity className="w-4 h-4" />}
+                            label="Thrust Schedule"
+                        />
+                        <TabButton
+                            active={activeTab === 'history'}
                             onClick={() => setActiveTab('history')}
-                            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider flex items-center gap-2 transition-colors ${activeTab === 'history'
-                                ? 'bg-theme-tertiary text-theme-primary border-r border-l border-theme'
-                                : 'text-theme-muted hover:text-theme-primary hover:bg-theme-elevated'
-                                }`}
-                        >
-                            <History className="w-4 h-4" />
-                            Iteration History
-                        </button>
+                            icon={<History className="w-4 h-4" />}
+                            label="Iteration History"
+                        />
+                        <TabButton
+                            active={activeTab === 'metrics'}
+                            onClick={() => setActiveTab('metrics')}
+                            icon={<BarChart3 className="w-4 h-4" />}
+                            label="Metrics"
+                        />
+                        <TabButton
+                            active={activeTab === 'runs'}
+                            onClick={() => setActiveTab('runs')}
+                            icon={<Database className="w-4 h-4" />}
+                            label="Run Manager"
+                        />
+                        <TabButton
+                            active={activeTab === 'compare'}
+                            onClick={() => setActiveTab('compare')}
+                            icon={<TrendingDown className="w-4 h-4" />}
+                            label="Comparison"
+                            badge={selectedRuns.length > 0 ? selectedRuns.length : undefined}
+                        />
                     </div>
 
-                    <button
-                        onClick={() => setIsLunarPanelOpen(!isLunarPanelOpen)}
-                        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded hover:bg-theme-elevated transition-colors ${isLunarPanelOpen ? 'text-theme-primary bg-theme-tertiary' : 'text-theme-muted'}`}
-                    >
-                        <Moon className="w-3.5 h-3.5" />
-                        {isLunarPanelOpen ? 'Close Lunar Analysis' : 'Open Lunar Analysis'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Export Button */}
+                        {selectedRuns.length > 0 && (
+                            <button
+                                onClick={() => setIsExportModalOpen(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-colors text-white"
+                                style={{ backgroundColor: 'var(--accent-blue)' }}
+                            >
+                                <Download className="w-3.5 h-3.5" />
+                                Export ({selectedRuns.length})
+                            </button>
+                        )}
+
+                        {/* Lunar Analysis Button */}
+                        <button
+                            onClick={() => setIsLunarPanelOpen(!isLunarPanelOpen)}
+                            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded hover:bg-theme-elevated transition-colors ${isLunarPanelOpen ? 'text-theme-primary bg-theme-tertiary' : 'text-theme-muted'}`}
+                        >
+                            <Moon className="w-3.5 h-3.5" />
+                            {isLunarPanelOpen ? 'Close' : 'Lunar Analysis'}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 relative overflow-hidden p-0 bg-theme-primary">
-                    {activeTab === 'schedule' ? <ScheduleVisualization /> : <IterationHistory />}
+                    {activeTab === 'schedule' && <ScheduleVisualization />}
+                    {activeTab === 'history' && <IterationHistory />}
+                    {activeTab === 'metrics' && <MetricsPanel />}
+                    {activeTab === 'runs' && <RunManager />}
+                    {activeTab === 'compare' && <ComparisonDashboard />}
                 </div>
             </div>
+
+            {/* Export Modal */}
+            <ExportModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+            />
         </main>
+    )
+}
+
+// Helper Component: Tab Button
+interface TabButtonProps {
+    active: boolean
+    onClick: () => void
+    icon: React.ReactNode
+    label: string
+    badge?: number
+}
+
+function TabButton({ active, onClick, icon, label, badge }: TabButtonProps) {
+    return (
+        <button
+            onClick={onClick}
+            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${
+                active
+                    ? 'bg-theme-tertiary text-theme-primary border-r border-l border-theme'
+                    : 'text-theme-muted hover:text-theme-primary hover:bg-theme-elevated'
+            }`}
+        >
+            {icon}
+            {label}
+            {badge !== undefined && badge > 0 && (
+                <span
+                    className="px-1.5 py-0.5 rounded-full text-xs font-bold text-white"
+                    style={{ backgroundColor: 'var(--accent-blue)' }}
+                >
+                    {badge}
+                </span>
+            )}
+        </button>
     )
 }

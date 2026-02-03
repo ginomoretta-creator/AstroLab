@@ -7,4 +7,5 @@ pytest
 httpx  # Required for FastAPI TestClient
 equinox
 jaxtyping
-httpx
+scipy
+casadi  # For classical trajectory optimization

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
-import { Trophy, Target, Fuel, Clock, Gauge, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Clock, Gauge, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 const T_STAR_DAYS = 4.342 // 1 normalized time unit in days
 

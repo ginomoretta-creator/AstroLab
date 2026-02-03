@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type SimulationMethod = 'thrml' | 'quantum' | 'random'
+export type SimulationMethod = 'classical' | 'hybrid'
 export type SimulationStatus = 'idle' | 'running' | 'completed' | 'error'
 
 export interface Trajectory {
@@ -16,7 +16,8 @@ export interface SimulationParams {
     mass: number
     thrust: number
     isp: number
-    initialAltitude: number
+    apogeeAltitude: number
+    perigeeAltitude: number
     dt: number
     numIterations: number
 }
@@ -31,6 +32,54 @@ export interface SimulationResult {
     bestThrustFraction?: number
     bestDistance?: number
     method?: SimulationMethod
+    metrics?: {
+        deltaV?: number
+        deltaV_numerical?: number
+        fuelConsumed?: number
+        timeOfFlight?: number
+        costBreakdown?: {
+            distance: number
+            velocity: number
+            fuel: number
+            capture_bonus: number
+        }
+    }
+}
+
+export interface RunMetadata {
+    run_id: string
+    timestamp: string
+    method: SimulationMethod
+    params: SimulationParams
+    finalCost?: number
+    deltaV?: number
+    timeOfFlight?: number
+    captured?: boolean
+    num_iterations: number
+    filename?: string
+}
+
+export interface ComparisonResult {
+    runs: Array<{
+        run_id: string
+        method: SimulationMethod
+        timestamp: string
+        delta_v?: number
+        time_of_flight?: number
+        fuel_consumed?: number
+        final_cost?: number
+        captured: boolean
+        num_iterations: number
+        delta_v_relative?: number
+        time_relative?: number
+        cost_relative?: number
+    }>
+    summary: {
+        best_delta_v?: number
+        best_time_of_flight?: number
+        best_cost?: number
+        num_runs_compared: number
+    }
 }
 
 interface SimulationState {
@@ -47,15 +96,22 @@ interface SimulationState {
     // Results
     currentIteration: number
     results: {
-        thrml: SimulationResult | null
-        quantum: SimulationResult | null
-        random: SimulationResult | null
+        classical: SimulationResult | null
+        hybrid: SimulationResult | null
     }
 
     // History
     trajectoryHistory: Trajectory[]
     iterationHistory: SimulationResult[]
     selectedResult: SimulationResult | null
+
+    // Run Storage (NEW)
+    savedRuns: RunMetadata[]
+    selectedRuns: string[]
+    comparisonData: ComparisonResult | null
+    isLoadingRuns: boolean
+    isSavingRun: boolean
+    isExporting: boolean
 
     // Actions
     setStatus: (status: SimulationStatus) => void
@@ -69,6 +125,15 @@ interface SimulationState {
     selectResult: (result: SimulationResult | null) => void
     clearResults: () => void
     reset: () => void
+
+    // Run Storage Actions (NEW)
+    setSavedRuns: (runs: RunMetadata[]) => void
+    toggleRunSelection: (runId: string) => void
+    clearRunSelection: () => void
+    setComparisonData: (data: ComparisonResult | null) => void
+    setIsLoadingRuns: (loading: boolean) => void
+    setIsSavingRun: (saving: boolean) => void
+    setIsExporting: (exporting: boolean) => void
 }
 
 const defaultParams: SimulationParams = {
@@ -78,7 +143,8 @@ const defaultParams: SimulationParams = {
     mass: 500,             // Smaller sat for realistic low-thrust
     thrust: 0.5,           // Typical Hall thruster
     isp: 3000,             // Hall thruster Isp
-    initialAltitude: 200,  // LEO parking orbit
+    apogeeAltitude: 400,   // Apogee altitude (km)
+    perigeeAltitude: 200,  // Perigee altitude (km)
     dt: 0.0005,            // Very small steps for smooth trajectories
     numIterations: 30,     // More iterations for convergence
 }
@@ -86,21 +152,27 @@ const defaultParams: SimulationParams = {
 export const useSimulationStore = create<SimulationState>((set) => ({
     // Initial state
     status: 'idle',
-    currentMethod: 'thrml',
+    currentMethod: 'classical',
     backendStatus: 'checking',
     backendPort: 8080,
     errorMessage: null,
     params: defaultParams,
     currentIteration: 0,
     results: {
-        thrml: null,
-        quantum: null,
-        random: null,
+        classical: null,
+        hybrid: null,
     },
     trajectoryHistory: [],
-
     iterationHistory: [],
     selectedResult: null,
+
+    // Run Storage Initial State (NEW)
+    savedRuns: [],
+    selectedRuns: [],
+    comparisonData: null,
+    isLoadingRuns: false,
+    isSavingRun: false,
+    isExporting: false,
 
     // Actions
     setStatus: (status) => set({ status }),
@@ -142,7 +214,7 @@ export const useSimulationStore = create<SimulationState>((set) => ({
     })),
 
     clearResults: () => set({
-        results: { thrml: null, quantum: null, random: null },
+        results: { classical: null, hybrid: null },
         trajectoryHistory: [],
         currentIteration: 0,
         errorMessage: null,
@@ -152,8 +224,30 @@ export const useSimulationStore = create<SimulationState>((set) => ({
         status: 'idle',
         params: defaultParams,
         currentIteration: 0,
-        results: { thrml: null, quantum: null, random: null },
+        results: { classical: null, hybrid: null },
         trajectoryHistory: [],
         errorMessage: null,
     }),
+
+    // Run Storage Actions (NEW)
+    setSavedRuns: (runs) => set({ savedRuns: runs }),
+
+    toggleRunSelection: (runId) => set((state) => {
+        const isSelected = state.selectedRuns.includes(runId)
+        return {
+            selectedRuns: isSelected
+                ? state.selectedRuns.filter(id => id !== runId)
+                : [...state.selectedRuns, runId]
+        }
+    }),
+
+    clearRunSelection: () => set({ selectedRuns: [] }),
+
+    setComparisonData: (data) => set({ comparisonData: data }),
+
+    setIsLoadingRuns: (loading) => set({ isLoadingRuns: loading }),
+
+    setIsSavingRun: (saving) => set({ isSavingRun: saving }),
+
+    setIsExporting: (exporting) => set({ isExporting: exporting }),
 }))

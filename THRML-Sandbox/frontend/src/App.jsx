@@ -13,7 +13,7 @@ function App() {
     thrust: 10.0,
     isp: 300.0,
     initial_altitude: 400.0,
-    method: 'thrml',
+    method: 'classical',
     dt: 0.01,
     num_iterations: 50
   });

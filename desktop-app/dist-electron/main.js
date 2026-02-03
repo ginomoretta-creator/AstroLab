@@ -199,8 +199,31 @@ electron.ipcMain.handle("backend:port", () => {
   return BACKEND_PORT;
 });
 electron.ipcMain.handle("backend:restart", async () => {
+  log("Restart requested...");
   stopPythonBackend();
-  await new Promise((resolve) => setTimeout(resolve, 1e3));
+  if (process.platform === "win32") {
+    try {
+      const { exec } = require("child_process");
+      exec("netstat -ano | findstr :8080", (err, stdout) => {
+        if (stdout) {
+          const lines = stdout.split("\n");
+          lines.forEach((line) => {
+            const match = line.match(/LISTENING\s+(\d+)/);
+            if (match) {
+              const pid = match[1];
+              log(`Killing process ${pid} using port 8080`);
+              exec(`taskkill /F /PID ${pid}`);
+            }
+          });
+        }
+      });
+    } catch (e) {
+      log("Error killing port 8080 processes: " + e);
+    }
+  }
+  await new Promise((resolve) => setTimeout(resolve, 5e3));
+  pythonProcess = null;
+  log("Now starting backend...");
   startPythonBackend();
   return { status: "restarting" };
 });

@@ -5,7 +5,6 @@ import {
     RotateCcw,
     Zap,
     Atom,
-    Shuffle,
     ChevronDown,
     ChevronRight,
     Settings,
@@ -17,20 +16,15 @@ import { useBackend } from '../../hooks/useBackend'
 import ParameterSlider from '../simulation/ParameterSlider'
 
 const methodConfig: Record<SimulationMethod, { icon: React.ReactNode; label: string; colorVar: string }> = {
-    thrml: {
+    classical: {
         icon: <Zap className="w-4 h-4" />,
-        label: 'THRML (Probabilistic)',
+        label: 'Classical (CEM)',
         colorVar: '--accent-purple'
     },
-    quantum: {
+    hybrid: {
         icon: <Atom className="w-4 h-4" />,
-        label: 'Quantum Annealing',
+        label: 'Hybrid Quantum-Classical',
         colorVar: '--accent-cyan'
-    },
-    random: {
-        icon: <Shuffle className="w-4 h-4" />,
-        label: 'Random Baseline',
-        colorVar: '--accent-orange'
     },
 }
 
@@ -85,7 +79,7 @@ export default function Sidebar() {
                     Generation Method
                 </h3>
                 <div className="space-y-2">
-                    {(['thrml', 'quantum', 'random'] as SimulationMethod[]).map((method) => {
+                    {(['classical', 'hybrid'] as SimulationMethod[]).map((method) => {
                         const config = methodConfig[method]
                         const isSelected = currentMethod === method
 
@@ -191,12 +185,20 @@ export default function Sidebar() {
                     {advancedExpanded && (
                         <div className="space-y-4 fade-in">
                             <ParameterSlider
-                                label="Initial Altitude (km)"
-                                value={params.initialAltitude}
+                                label="Apogee Altitude (km)"
+                                value={params.apogeeAltitude}
                                 min={200}
-                                max={2000}
-                                step={50}
-                                onChange={(v) => updateParams({ initialAltitude: v })}
+                                max={10000}
+                                step={100}
+                                onChange={(v) => updateParams({ apogeeAltitude: v })}
+                            />
+                            <ParameterSlider
+                                label="Perigee Altitude (km)"
+                                value={params.perigeeAltitude}
+                                min={200}
+                                max={10000}
+                                step={100}
+                                onChange={(v) => updateParams({ perigeeAltitude: v })}
                             />
                             <ParameterSlider
                                 label="Time Step (dt)"
