@@ -4,7 +4,7 @@ export type SimulationMethod = 'classical' | 'hybrid'
 export type SimulationStatus = 'idle' | 'running' | 'completed' | 'error'
 
 export interface Trajectory {
-    points: [number, number][]
+    points: [number, number][]  // Historical trajectories stored as 2D for memory efficiency
     cost: number
     method: SimulationMethod
 }
@@ -20,11 +20,17 @@ export interface SimulationParams {
     perigeeAltitude: number
     dt: number
     numIterations: number
+    // 3D Parameters (NEW)
+    enable3D: boolean
+    inclinationDeg: number
+    raanDeg: number
+    thrustMode: 'velocity_aligned' | 'orbital_plane'
 }
 
 export interface SimulationResult {
     iteration: number
     totalIterations: number
+    dimension: 2 | 3  // NEW: Track if 2D or 3D
     trajectories: number[][][]
     bestTrajectory: number[][]
     bestCost: number
@@ -147,6 +153,11 @@ const defaultParams: SimulationParams = {
     perigeeAltitude: 200,  // Perigee altitude (km)
     dt: 0.0005,            // Very small steps for smooth trajectories
     numIterations: 30,     // More iterations for convergence
+    // 3D Parameters
+    enable3D: false,
+    inclinationDeg: 0,
+    raanDeg: 0,
+    thrustMode: 'orbital_plane',
 }
 
 export const useSimulationStore = create<SimulationState>((set) => ({

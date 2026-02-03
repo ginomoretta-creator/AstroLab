@@ -14,11 +14,17 @@ export interface SimulationRequest {
     perigeeAltitude: number
     dt: number
     numIterations: number
+    // 3D Parameters
+    enable3D: boolean
+    inclinationDeg: number
+    raanDeg: number
+    thrustMode: 'velocity_aligned' | 'orbital_plane'
 }
 
 export interface StreamedResult {
     iteration: number
     totalIterations: number
+    dimension?: 2 | 3  // NEW: Track if 2D or 3D
     trajectories: number[][][]
     bestTrajectory: number[][]
     bestCost: number
@@ -89,6 +95,11 @@ class BackendAPI {
                     dt: request.dt,
                     num_iterations: request.numIterations,
                     method: request.method,
+                    // 3D Parameters
+                    enable_3d: request.enable3D,
+                    inclination_deg: request.inclinationDeg,
+                    raan_deg: request.raanDeg,
+                    thrust_mode: request.thrustMode,
                 }),
                 signal: this.abortController.signal,
             })
@@ -168,6 +179,7 @@ class BackendAPI {
                             onProgress({
                                 iteration: data.iteration || 0,
                                 totalIterations: data.total_iterations || request.numIterations,
+                                dimension: data.dimension || 2,  // NEW: Track dimension
                                 trajectories: safeTrajectories,
                                 bestTrajectory: downsampledBest,
                                 bestCost: typeof data.best_cost === 'number' ? data.best_cost : Infinity,
@@ -264,6 +276,11 @@ export function useBackend() {
             perigeeAltitude: params.perigeeAltitude,
             dt: params.dt,
             numIterations: params.numIterations,
+            // 3D Parameters
+            enable3D: params.enable3D,
+            inclinationDeg: params.inclinationDeg,
+            raanDeg: params.raanDeg,
+            thrustMode: params.thrustMode,
         }
 
         await backendAPI.startSimulation(
@@ -271,6 +288,8 @@ export function useBackend() {
             (result) => {
                 // Add best trajectory for visualization
                 // It is already downsampled in onProgress
+                // Map to [x, y] for 2D compatibility with Trajectory type
+                // Note: Full trajectory with z is in result itself
                 if (result.bestTrajectory.length > 0) {
                     addTrajectory({
                         points: result.bestTrajectory.map(p => [p[0], p[1]] as [number, number]),
@@ -283,6 +302,7 @@ export function useBackend() {
                 addResult(currentMethod, {
                     iteration: result.iteration,
                     totalIterations: result.totalIterations,
+                    dimension: result.dimension || 2,  // NEW
                     trajectories: result.trajectories,
                     bestTrajectory: result.bestTrajectory,
                     bestCost: result.bestCost,

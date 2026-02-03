@@ -51,7 +51,7 @@ class OrbitalElements(NamedTuple):
 
 
 # =============================================================================
-# Core CR3BP Dynamics (5-State with Mass)
+# Core CR3BP Dynamics (5-State with Mass - 2D)
 # =============================================================================
 
 @jax.jit
@@ -62,45 +62,45 @@ def equations_of_motion_with_mass(
     mu: float = MU
 ) -> jnp.ndarray:
     """
-    CR3BP Equations of Motion with mass depletion.
-    
+    CR3BP Equations of Motion with mass depletion (2D planar).
+
     State vector: [x, y, vx, vy, m]
-    
+
     Dynamics:
         ẋ = vx
         ẏ = vy
         v̇x = 2*vy + x - (1-μ)(x+μ)/r1³ - μ(x-(1-μ))/r2³ + ax_thrust
         v̇y = -2*vx + y - (1-μ)y/r1³ - μy/r2³ + ay_thrust
         ṁ = -T / (Isp * g0)  [only when thrusting]
-    
+
     Args:
         state: [x, y, vx, vy, m] - position, velocity, mass (normalized)
         thrust_mag: Thrust magnitude (normalized force, not acceleration)
         isp_normalized: Specific impulse in normalized units
         mu: Mass ratio (default: Earth-Moon)
-        
+
     Returns:
         dstate_dt: [vx, vy, ax, ay, mdot]
     """
     x, y, vx, vy, m = state
-    
+
     # Distances to primaries with softening
     r1_sq = (x + mu)**2 + y**2
     r2_sq = (x - (1 - mu))**2 + y**2
     r1_cubed = (r1_sq + EPSILON)**1.5
     r2_cubed = (r2_sq + EPSILON)**1.5
-    
+
     # Gravitational accelerations
     ax_grav = 2 * vy + x - (1 - mu) * (x + mu) / r1_cubed - mu * (x - (1 - mu)) / r2_cubed
     ay_grav = -2 * vx + y - (1 - mu) * y / r1_cubed - mu * y / r2_cubed
-    
+
     # Thrust acceleration (tangential - velocity-aligned)
     # a = T / m (force divided by current mass)
     v_mag = jnp.sqrt(vx**2 + vy**2 + 1e-10)
     thrust_accel = thrust_mag / (m + 1e-10)  # Avoid division by zero
     ax_thrust = thrust_accel * vx / v_mag
     ay_thrust = thrust_accel * vy / v_mag
-    
+
     # Mass flow rate (only when thrusting)
     # ṁ = -T / (Isp * g0)
     # thrust_mag is normalized force; isp_normalized and G0_NORM are consistent
@@ -109,8 +109,94 @@ def equations_of_motion_with_mass(
         -thrust_mag / (isp_normalized * G0_NORM + 1e-10),
         0.0
     )
-    
+
     return jnp.array([vx, vy, ax_grav + ax_thrust, ay_grav + ay_thrust, mdot])
+
+
+# =============================================================================
+# 3D CR3BP Dynamics (7-State with Mass)
+# =============================================================================
+
+@partial(jax.jit, static_argnames=['thrust_mode'])
+def equations_of_motion_with_mass_3d(
+    state: jnp.ndarray,
+    thrust_mag: float,
+    isp_normalized: float,
+    thrust_mode: str = "orbital_plane",
+    mu: float = MU
+) -> jnp.ndarray:
+    """
+    CR3BP Equations of Motion with mass depletion (3D).
+
+    State vector: [x, y, z, vx, vy, vz, m]
+
+    Dynamics:
+        ẋ = vx
+        ẏ = vy
+        ż = vz
+        v̇x = 2*vy + x - (1-μ)(x+μ)/r1³ - μ(x-(1-μ))/r2³ + ax_thrust
+        v̇y = -2*vx + y - (1-μ)y/r1³ - μy/r2³ + ay_thrust
+        v̇z = -(1-μ)z/r1³ - μz/r2³ + az_thrust  (No Coriolis in z)
+        ṁ = -T / (Isp * g0)  [only when thrusting]
+
+    Args:
+        state: [x, y, z, vx, vy, vz, m] - position, velocity, mass (normalized)
+        thrust_mag: Thrust magnitude (normalized force, not acceleration)
+        isp_normalized: Specific impulse in normalized units
+        thrust_mode: "velocity_aligned" or "orbital_plane"
+        mu: Mass ratio (default: Earth-Moon)
+
+    Returns:
+        dstate_dt: [vx, vy, vz, ax, ay, az, mdot]
+    """
+    x, y, z, vx, vy, vz, m = state
+
+    # 3D distances to primaries with softening
+    r1_sq = (x + mu)**2 + y**2 + z**2
+    r2_sq = (x - (1 - mu))**2 + y**2 + z**2
+    r1_cubed = (r1_sq + EPSILON)**1.5
+    r2_cubed = (r2_sq + EPSILON)**1.5
+
+    # 3D gravitational accelerations
+    ax_grav = 2 * vy + x - (1 - mu) * (x + mu) / r1_cubed - mu * (x - (1 - mu)) / r2_cubed
+    ay_grav = -2 * vx + y - (1 - mu) * y / r1_cubed - mu * y / r2_cubed
+    az_grav = -(1 - mu) * z / r1_cubed - mu * z / r2_cubed  # No Coriolis in z
+
+    # Thrust direction based on mode
+    thrust_accel = thrust_mag / (m + 1e-10)
+
+    r_vec = jnp.array([x, y, z])
+    v_vec = jnp.array([vx, vy, vz])
+
+    if thrust_mode == "orbital_plane":
+        # Orbital plane mode: thrust perpendicular to angular momentum
+        # More realistic for real spacecraft operations
+        h_vec = jnp.cross(r_vec, v_vec)
+        h_mag_sq = jnp.dot(h_vec, h_vec) + 1e-10
+
+        # Velocity component in orbital plane (perpendicular to h)
+        v_in_plane = v_vec - (jnp.dot(v_vec, h_vec) / h_mag_sq) * h_vec
+        v_in_plane_mag = jnp.linalg.norm(v_in_plane) + 1e-10
+        thrust_dir = v_in_plane / v_in_plane_mag
+    else:
+        # Velocity-aligned mode: simple 3D velocity direction
+        v_mag = jnp.linalg.norm(v_vec) + 1e-10
+        thrust_dir = v_vec / v_mag
+
+    ax_thrust, ay_thrust, az_thrust = thrust_accel * thrust_dir
+
+    # Mass flow rate (only when thrusting)
+    mdot = jnp.where(
+        thrust_mag > 0,
+        -thrust_mag / (isp_normalized * G0_NORM + 1e-10),
+        0.0
+    )
+
+    return jnp.array([vx, vy, vz,
+                      ax_grav + ax_thrust,
+                      ay_grav + ay_thrust,
+                      az_grav + az_thrust,
+                      mdot])
 
 
 @jax.jit  
@@ -164,7 +250,24 @@ def rk4_step_with_mass(
     k2 = equations_of_motion_with_mass(state + 0.5 * dt * k1, thrust_mag, isp_normalized)
     k3 = equations_of_motion_with_mass(state + 0.5 * dt * k2, thrust_mag, isp_normalized)
     k4 = equations_of_motion_with_mass(state + dt * k3, thrust_mag, isp_normalized)
-    
+
+    return state + (dt / 6.0) * (k1 + 2*k2 + 2*k3 + k4)
+
+
+@partial(jax.jit, static_argnames=['thrust_mode'])
+def rk4_step_with_mass_3d(
+    state: jnp.ndarray,
+    dt: float,
+    thrust_mag: float,
+    isp_normalized: float,
+    thrust_mode: str = "orbital_plane"
+) -> jnp.ndarray:
+    """Single RK4 step for 7-state 3D dynamics."""
+    k1 = equations_of_motion_with_mass_3d(state, thrust_mag, isp_normalized, thrust_mode)
+    k2 = equations_of_motion_with_mass_3d(state + 0.5 * dt * k1, thrust_mag, isp_normalized, thrust_mode)
+    k3 = equations_of_motion_with_mass_3d(state + 0.5 * dt * k2, thrust_mag, isp_normalized, thrust_mode)
+    k4 = equations_of_motion_with_mass_3d(state + dt * k3, thrust_mag, isp_normalized, thrust_mode)
+
     return state + (dt / 6.0) * (k1 + 2*k2 + 2*k3 + k4)
 
 
@@ -278,10 +381,65 @@ def propagate_trajectory_4state(
     return full_trajectory
 
 
+@partial(jax.jit, static_argnames=['num_steps', 'thrust_mode'])
+def propagate_trajectory_with_mass_3d(
+    initial_state: jnp.ndarray,
+    thrust_schedule: jnp.ndarray,
+    thrust_magnitude: float,
+    isp_normalized: float,
+    dt: float,
+    num_steps: int,
+    thrust_mode: str = "orbital_plane"
+) -> jnp.ndarray:
+    """
+    Propagates a 3D trajectory with mass depletion.
+
+    Args:
+        initial_state: [x, y, z, vx, vy, vz, m] - initial state (7 elements)
+        thrust_schedule: (num_steps,) binary array [0 or 1]
+        thrust_magnitude: Maximum thrust (normalized force)
+        isp_normalized: Specific impulse (normalized)
+        dt: Time step (normalized)
+        num_steps: Number of steps
+        thrust_mode: "velocity_aligned" or "orbital_plane"
+
+    Returns:
+        trajectory: (num_steps + 1, 7) array of states
+    """
+    def step_fn(carry, i):
+        state = carry
+
+        # Check termination condition (distance > 1.5 * Earth-Moon distance)
+        dist_from_center = jnp.linalg.norm(state[:3])
+        is_escaped = dist_from_center > 1.5
+
+        thrust_on = thrust_schedule[i]
+        current_thrust = thrust_on * thrust_magnitude
+        next_state_computed = rk4_step_with_mass_3d(state, dt, current_thrust, isp_normalized, thrust_mode)
+
+        # If escaped, freeze state
+        next_state = jnp.where(is_escaped, state, next_state_computed)
+
+        return next_state, state
+
+    final_state, trajectory_history = jax.lax.scan(
+        step_fn, initial_state, jnp.arange(num_steps)
+    )
+
+    # Append final state
+    full_trajectory = jnp.vstack([trajectory_history, final_state[None, :]])
+    return full_trajectory
+
+
 # Batch propagation (vmap over schedule dimension)
 batch_propagate_with_mass = jax.vmap(
     propagate_trajectory_with_mass,
     in_axes=(None, 0, None, None, None, None)
+)
+
+batch_propagate_with_mass_3d = jax.vmap(
+    propagate_trajectory_with_mass_3d,
+    in_axes=(None, 0, None, None, None, None, None)
 )
 
 batch_propagate_4state = jax.vmap(
@@ -606,41 +764,123 @@ def get_parking_orbit_state(
     inclination: float = 0.0  # Not used in 2D, for future 3D extension
 ) -> jnp.ndarray:
     """
-    Generate initial state for a circular parking orbit around Earth.
-    
+    Generate initial state for a circular parking orbit around Earth (2D planar).
+
     Args:
         altitude_km: Altitude above Earth's surface (km)
         inclination: Orbit inclination (degrees) - placeholder for 3D
-        
+
     Returns:
         state: [x, y, vx, vy, m_normalized] initial state
         Mass is set to 1.0 (normalized) - should be overwritten by user config
     """
     from .constants import R_EARTH_KM, L_STAR_KM
-    
+
     # Orbital radius
     r_km = R_EARTH_KM + altitude_km
     r_norm = r_km / L_STAR_KM
-    
+
     # Position (start on x-axis, right of Earth)
     x = -MU + r_norm
     y = 0.0
-    
+
     # Circular velocity in rotating frame
     # v_inertial = sqrt(GM/r), v_rotating = v_inertial - ω × r
     # In normalized units, GM_Earth ≈ 1-μ, ω = 1
     v_circ = jnp.sqrt((1 - MU) / r_norm)
-    
+
     # In rotating frame: subtract frame rotation at position x
     # vy_rotating = vy_inertial - omega * x (since ω = 1 and rotation is about z)
     # Note: x = -MU + r_norm, NOT just r_norm!
     vx = 0.0
     vy = v_circ - x  # FIXED: use x (the actual position), not r_norm
-    
+
     # Mass (normalized to 1.0)
     m = 1.0
-    
+
     return jnp.array([x, y, vx, vy, m])
+
+
+def get_parking_orbit_state_3d(
+    altitude_km: float = 200.0,
+    inclination_deg: float = 0.0,
+    raan_deg: float = 0.0,
+    true_anomaly_deg: float = 90.0  # Start at 90° for max z-component visibility
+) -> jnp.ndarray:
+    """
+    Generate 3D initial state for a circular parking orbit around Earth with inclination.
+
+    Args:
+        altitude_km: Altitude above Earth's surface (km)
+        inclination_deg: Orbit inclination (degrees)
+        raan_deg: Right Ascension of Ascending Node (degrees)
+        true_anomaly_deg: True anomaly (degrees, default 90° for max out-of-plane)
+
+    Returns:
+        state: [x, y, z, vx, vy, vz, m_normalized] initial state in rotating frame
+    """
+    from .constants import R_EARTH_KM, L_STAR_KM
+
+    # Orbital radius
+    r_km = R_EARTH_KM + altitude_km
+    r_norm = r_km / L_STAR_KM
+
+    # Circular velocity magnitude (inertial frame)
+    v_circ = jnp.sqrt((1 - MU) / r_norm)
+
+    # True anomaly in radians
+    nu = jnp.deg2rad(true_anomaly_deg)
+    cos_nu, sin_nu = jnp.cos(nu), jnp.sin(nu)
+
+    # Start in perifocal frame (orbit plane with Earth at origin)
+    # For circular orbit: r is constant, position rotates by true anomaly
+    x_pf = r_norm * cos_nu
+    y_pf = r_norm * sin_nu
+    z_pf = 0.0  # Perifocal frame is 2D in orbit plane
+
+    # Velocity in perifocal frame (perpendicular to position for circular orbit)
+    vx_pf = -v_circ * sin_nu
+    vy_pf = v_circ * cos_nu
+    vz_pf = 0.0
+
+    # Rotation from perifocal to inertial frame
+    i_rad = jnp.deg2rad(inclination_deg)
+    Omega_rad = jnp.deg2rad(raan_deg)
+
+    cos_Omega, sin_Omega = jnp.cos(Omega_rad), jnp.sin(Omega_rad)
+    cos_i, sin_i = jnp.cos(i_rad), jnp.sin(i_rad)
+
+    # Rotation matrix: Perifocal → Inertial (R3(-Ω) R1(-i))
+    # This rotates the orbit plane by RAAN about z-axis, then by inclination about x-axis
+    R = jnp.array([
+        [cos_Omega, -sin_Omega * cos_i, sin_Omega * sin_i],
+        [sin_Omega, cos_Omega * cos_i, -cos_Omega * sin_i],
+        [0.0, sin_i, cos_i]
+    ])
+
+    # Rotate position and velocity to inertial frame (Earth-centered)
+    r_inertial_earth = R @ jnp.array([x_pf, y_pf, z_pf])
+    v_inertial_earth = R @ jnp.array([vx_pf, vy_pf, vz_pf])
+
+    # Convert to barycentric rotating frame
+    # Earth is at (-μ, 0, 0) in barycentric frame
+    # So satellite position in barycentric frame = Earth position + satellite position relative to Earth
+    r_barycentric = r_inertial_earth + jnp.array([-MU, 0.0, 0.0])
+
+    # Velocity transformation: v_rotating = v_inertial - ω × r
+    # where ω = [0, 0, 1] (angular velocity of rotating frame)
+    # ω × r = [0, 0, 1] × [x, y, z] = [-y, x, 0]
+    omega_cross_r = jnp.array([-r_barycentric[1], r_barycentric[0], 0.0])
+    v_rotating = v_inertial_earth - omega_cross_r
+
+    # Mass (normalized to 1.0)
+    m = 1.0
+
+    return jnp.array([
+        r_barycentric[0], r_barycentric[1], r_barycentric[2],
+        v_rotating[0], v_rotating[1], v_rotating[2],
+        m
+    ])
 
 
 def get_initial_state_4d(altitude_km: float = 200.0) -> jnp.ndarray:
@@ -687,40 +927,45 @@ def dimensionalize_trajectory(
 __all__ = [
     # Core dynamics
     'equations_of_motion_with_mass',
+    'equations_of_motion_with_mass_3d',
     'equations_of_motion_4state',
     'rk4_step_with_mass',
+    'rk4_step_with_mass_3d',
     'rk4_step_4state',
-    
+
     # Propagation
     'propagate_trajectory_with_mass',
+    'propagate_trajectory_with_mass_3d',
     'propagate_trajectory_4state',
     'batch_propagate_with_mass',
+    'batch_propagate_with_mass_3d',
     'batch_propagate_4state',
     'batch_propagate',  # Alias
-    
+
     # Orbital mechanics
     'compute_distance_to_body',
     'compute_relative_velocity',
     'detect_periapsis_apoapsis',
     'compute_osculating_elements',
-    
+
     # Constraints
     'check_fuel_budget',
     'compute_fuel_consumed',
-    
+
     # Cost functions
     'compute_trajectory_cost',
     'batch_compute_cost',
-    
+
     # Validation
     'compute_jacobi_constant',
     'validate_trajectory',
-    
+
     # Utilities
     'get_parking_orbit_state',
+    'get_parking_orbit_state_3d',
     'get_initial_state_4d',
     'dimensionalize_trajectory',
-    
+
     # Data structures
     'TrajectoryResult',
     'OrbitalElements',

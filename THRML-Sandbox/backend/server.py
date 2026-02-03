@@ -66,23 +66,29 @@ class SimulationRequest(BaseModel):
     num_steps: int = 120000  # More steps for longer trajectories (~250 days)
     batch_size: int = 100  # Increased for better exploration
     coupling_strength: float = 0.5
-    
+
     # Physical Parameters
     mass: float = 500.0 # kg (smaller sat for realistic low-thrust)
     thrust: float = 0.5 # N (typical Hall thruster)
     isp: float = 3000.0 # s (Hall thruster Isp)
     apogee_altitude: float = 400.0 # km (Apogee altitude above Earth)
     perigee_altitude: float = 200.0 # km (Perigee altitude above Earth)
-    
+
     # Method: classical uses CEM, hybrid uses quantum annealing + classical refinement
     method: Literal["classical", "hybrid"] = "classical"
-    
+
     # Advanced
     dt: float = 0.0005  # Very small steps for smooth trajectories (35000 * 0.0005 = 17.5 norm time = ~76 days)
     num_iterations: int = 30  # More iterations for convergence
-    
+
     # Demo mode: scales thrust up for faster visualization during development
     demo_mode: bool = False  # If True, thrust is multiplied by 50x
+
+    # 3D Parameters (NEW)
+    enable_3d: bool = False  # Enable 3D trajectories with inclination
+    inclination_deg: float = 0.0  # Orbital inclination (degrees)
+    raan_deg: float = 0.0  # Right Ascension of Ascending Node (degrees)
+    thrust_mode: Literal["velocity_aligned", "orbital_plane"] = "orbital_plane"  # Thrust direction mode
 
 # Constants for Normalization
 L_STAR = 384400.0 * 1000 # meters (Earth-Moon Distance)
@@ -102,17 +108,33 @@ def read_root():
         }
     }
 
-def get_initial_state(apogee_km, perigee_km):
+def get_initial_state(apogee_km, perigee_km, enable_3d=False, inclination_deg=0.0, raan_deg=0.0):
     """
     Calculate initial state for elliptical orbit at perigee.
 
     Args:
         apogee_km: Apogee altitude above Earth (km)
         perigee_km: Perigee altitude above Earth (km)
+        enable_3d: If True, return 7-state 3D vector; otherwise 4-state 2D
+        inclination_deg: Orbital inclination (degrees, only used if enable_3d=True)
+        raan_deg: Right Ascension of Ascending Node (degrees, only used if enable_3d=True)
 
     Returns:
-        [x, y, vx, vy] in normalized rotating frame
+        [x, y, vx, vy] for 2D or [x, y, z, vx, vy, vz] for 3D (mass excluded) in normalized rotating frame
     """
+    if enable_3d:
+        # Use core's 3D initial state generator
+        try:
+            from core.physics_core import get_parking_orbit_state_3d
+            # Use perigee altitude for circular orbit approximation
+            state_7d = get_parking_orbit_state_3d(perigee_km, inclination_deg, raan_deg)
+            # Return without mass for compatibility with existing code
+            return state_7d[:6].tolist()
+        except ImportError:
+            print("[WARNING] 3D mode requested but core module unavailable, falling back to 2D", flush=True)
+            enable_3d = False
+
+    # 2D Mode (existing logic)
     R_EARTH_KM = 6378.0
     L_MOON_KM = 384400.0
 
@@ -155,46 +177,71 @@ def run_simulation(req: SimulationRequest):
         try:
             key = jax.random.PRNGKey(int(np.random.randint(0, 100000)))
             
-            # 1. Calculate Normalized Thrust Acceleration (clamped for stability)
+            # 1. Calculate Normalized Thrust (acceleration for 2D, force for 3D)
             accel_metric = req.thrust / req.mass
             accel_norm = accel_metric * (T_STAR**2 / L_STAR)
-            
+
+            # For 3D mode, also calculate normalized force and ISP
+            if req.enable_3d:
+                # Force normalization: F_star = M_star * L_star / T_star^2
+                F_STAR = M_STAR * L_STAR / (T_STAR**2)
+                thrust_norm = req.thrust / F_STAR
+                # ISP normalization: isp_norm = isp * g0 * T_star / L_star
+                isp_norm = req.isp * 9.80665 * T_STAR / L_STAR
+
             # Demo mode: scale up thrust by 50x for faster development iteration
             if req.demo_mode:
                 accel_norm *= 50.0
-            
+                if req.enable_3d:
+                    thrust_norm *= 50.0
+
             accel_norm = float(np.clip(accel_norm, 0.0, 0.5))  # Allow higher thrust in demo mode
             
-            # 2. Determine Initial State - ALWAYS use elliptical orbit calculation
-            # The local get_initial_state() properly handles elliptical orbits
-            # while the core module only supports circular orbits
-            print(f"[DEBUG] Computing initial state for apogee={req.apogee_altitude}, perigee={req.perigee_altitude}", flush=True)
-            init_state = get_initial_state(req.apogee_altitude, req.perigee_altitude)
-            print(f"[DEBUG] Initial state computed: {init_state}", flush=True)
+            # 2. Determine Initial State
+            # Support both 2D and 3D modes
+            mode_str = f"3D (i={req.inclination_deg}deg, RAAN={req.raan_deg}deg)" if req.enable_3d else "2D"
+            print(f"[DEBUG] Computing initial state ({mode_str}) for perigee={req.perigee_altitude} km", flush=True)
+            init_state = get_initial_state(
+                req.apogee_altitude,
+                req.perigee_altitude,
+                enable_3d=req.enable_3d,
+                inclination_deg=req.inclination_deg,
+                raan_deg=req.raan_deg
+            )
             init_state_arr = jnp.array(init_state)
-            print(f"[DEBUG] Converted to JAX array: {init_state_arr.shape}", flush=True)
+            print(f"[DEBUG] Initial state ({init_state_arr.shape[0]} components): {init_state_arr}", flush=True)
+
+            if req.enable_3d:
+                pos = init_state_arr[:3]
+                vel = init_state_arr[3:6]
+                print(f"[3D DEBUG] Position: {pos}, |r|={jnp.linalg.norm(pos):.6f}", flush=True)
+                print(f"[3D DEBUG] Velocity: {vel}, |v|={jnp.linalg.norm(vel):.6f}", flush=True)
+                print(f"[3D DEBUG] Thrust: {thrust_norm:.6e}, ISP: {isp_norm:.6f}", flush=True)
             
-            # 3. Initialize physics-aware bias if available
-            if CORE_AVAILABLE:
+            # 3. Initialize physics-aware bias if available (only for 2D mode)
+            # Note: Physics-aware bias is designed for 4-state 2D dynamics
+            if CORE_AVAILABLE and not req.enable_3d:
                 # Compute reference trajectory first!
                 ref_traj = compute_reference_trajectory_for_bias(
-                    req.num_steps, 
-                    req.dt, 
-                    accel_norm, 
+                    req.num_steps,
+                    req.dt,
+                    accel_norm,
                     init_state_arr
                 )
-                
+
                 initial_bias = compute_physics_bias_field(
-                    req.num_steps, 
+                    req.num_steps,
                     ref_traj,  # Pass the reference!
                     0.4
                 )
                 current_bias = initial_bias
             else:
                 current_bias = None
+                if req.enable_3d:
+                    print("[3D MODE] Physics-aware bias disabled (designed for 2D only)", flush=True)
             
             # 4. Moon position for cost calculation
-            moon_pos = jnp.array([1 - MU, 0])
+            moon_pos = jnp.array([1 - MU, 0, 0]) if req.enable_3d else jnp.array([1 - MU, 0])
 
             # 5. Lunar Capture Criteria (SUCCESS CONDITION)
             # SOI radius: 66,100 km / 384,400 km = 0.172 normalized
@@ -260,34 +307,61 @@ def run_simulation(req: SimulationRequest):
                 schedules = jnp.where(valid_mask[:, None], schedules, replacement_schedules)
                 thrust_fractions = jnp.mean(schedules, axis=1)
                     
-                # Propagate Physics
-                thrust_schedules_mag = schedules * accel_norm
-                trajectories = batch_propagate(init_state_arr, thrust_schedules_mag, dt, req.num_steps)
+                # Propagate Physics (2D or 3D based on enable_3d flag)
+                if req.enable_3d:
+                    # 3D Mode: Use batch_propagate_with_mass_3d from core
+                    try:
+                        from core.physics_core import batch_propagate_with_mass_3d
+                        # init_state_arr is [x, y, z, vx, vy, vz] (6 elements)
+                        # Add mass component to get [x, y, z, vx, vy, vz, m] (7 elements)
+                        init_state_with_mass = jnp.append(init_state_arr, 1.0)
+                        # Use pre-calculated normalized thrust and ISP
+                        trajectories = batch_propagate_with_mass_3d(
+                            init_state_with_mass,
+                            schedules,
+                            thrust_norm,
+                            isp_norm,
+                            dt,
+                            req.num_steps,
+                            req.thrust_mode
+                        )
+                        print(f"[3D DEBUG] Initial state shape: {init_state_with_mass.shape}, Trajectories shape: {trajectories.shape}", flush=True)
+                    except ImportError:
+                        print("[ERROR] 3D mode requires core module with batch_propagate_with_mass_3d", flush=True)
+                        raise
+                else:
+                    # 2D Mode: Use existing batch_propagate (4-state)
+                    thrust_schedules_mag = schedules * accel_norm
+                    trajectories = batch_propagate(init_state_arr, thrust_schedules_mag, dt, req.num_steps)
 
                 # === IMPROVED MOON-SEEKING COST FUNCTION ===
-                
+
+                # Extract position and velocity indices based on dimension
+                pos_slice = slice(0, 3) if req.enable_3d else slice(0, 2)
+                vel_slice = slice(3, 6) if req.enable_3d else slice(2, 4)
+
                 # 1. Final distance to Moon
-                final_positions = trajectories[:, -1, :2]
+                final_positions = trajectories[:, -1, pos_slice]
                 final_dist = jnp.linalg.norm(final_positions - moon_pos, axis=1)
                 radii = jnp.linalg.norm(final_positions, axis=1)
-                
+
                 # 2. MINIMUM distance to Moon during entire trajectory (key improvement!)
-                all_dists_to_moon = jnp.linalg.norm(trajectories[:, :, :2] - moon_pos, axis=2)
+                all_dists_to_moon = jnp.linalg.norm(trajectories[:, :, pos_slice] - moon_pos, axis=2)
                 min_dist_to_moon = jnp.min(all_dists_to_moon, axis=1)
-                
+
                 # 3. Approach progress: are we getting closer over time?
-                initial_dist = jnp.linalg.norm(trajectories[:, 0, :2] - moon_pos, axis=1)
+                initial_dist = jnp.linalg.norm(trajectories[:, 0, pos_slice] - moon_pos, axis=1)
                 approach_progress = initial_dist - final_dist  # positive = getting closer
-                
+
                 # 4. Apoapsis reward (keep this for orbit-raising behavior)
-                earth_pos = jnp.array([-MU, 0])
-                all_dists_from_earth = jnp.linalg.norm(trajectories[:, :, :2] - earth_pos, axis=2)
+                earth_pos = jnp.array([-MU, 0, 0]) if req.enable_3d else jnp.array([-MU, 0])
+                all_dists_from_earth = jnp.linalg.norm(trajectories[:, :, pos_slice] - earth_pos, axis=2)
                 max_apoapsis = jnp.max(all_dists_from_earth, axis=1)
                 apoapsis_reward = jnp.clip(max_apoapsis, 0.0, 1.0) * 0.2
 
                 # 5. Velocity Guidance (Prevent flybys)
                 # Calculate velocity relative to Moon frame (already in rotating frame)
-                velocities = trajectories[:, :, 2:4]
+                velocities = trajectories[:, :, vel_slice]
                 vel_mags = jnp.linalg.norm(velocities, axis=2)
                 
                 # Identify where we are close to Moon (< 0.05 normalized ~ 19,000 km)
@@ -443,6 +517,7 @@ def run_simulation(req: SimulationRequest):
                 chunk_data = {
                     "iteration": i + 1,
                     "total_iterations": req.num_iterations,
+                    "dimension": 3 if req.enable_3d else 2,  # NEW: Dimension field
                     "trajectories": chunk_trajectories.tolist(),
                     "best_cost": best_cost,
                     "mean_cost": float(np.mean(total_cost_np)),
@@ -453,9 +528,9 @@ def run_simulation(req: SimulationRequest):
                     "best_thrust_fraction": best_thrust_fraction,
                     "best_distance": best_distance,
                     "radial_penalty": float(np.mean(radial_penalty)),
-                    "captured": best_captured,  # NEW: Lunar capture flag
-                    "capture_distance": best_capture_dist,  # NEW: Distance at capture
-                    "metrics": enhanced_metrics  # NEW: Enhanced metrics
+                    "captured": best_captured,  # Lunar capture flag
+                    "capture_distance": best_capture_dist,  # Distance at capture
+                    "metrics": enhanced_metrics  # Enhanced metrics
                 }
 
                 # Enhanced logging with capture status
