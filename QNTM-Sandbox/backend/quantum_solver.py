@@ -150,20 +150,24 @@ class SimulatedQuantumAnnealer:
         initial_state: Optional[np.ndarray] = None,
         thrust_accel: float = 0.01,
         dt: float = 0.01,
-        fuel_budget_fraction: float = 0.4
+        fuel_budget_fraction: float = 0.4,
+        enable_3d: bool = False  # NEW: 3D support
     ) -> Dict[str, Any]:
         """
         Generate physics-aware thrust schedules with fuel budget filtering.
-        
+
+        Supports both 2D (4-state) and 3D (6-7 state) trajectories.
+
         Args:
             num_steps: Schedule length
             batch_size: Number of valid schedules to return
             coupling_strength: Ising smoothness
-            initial_state: Initial orbit state
+            initial_state: Initial orbit state (4D for 2D, 6-7D for 3D)
             thrust_accel: Thrust acceleration
             dt: Time step
             fuel_budget_fraction: Target thrust duty cycle
-            
+            enable_3d: If True, use 3D physics (NEW)
+
         Returns:
             Dictionary with schedules, energies, metadata
         """
@@ -173,12 +177,17 @@ class SimulatedQuantumAnnealer:
                 initial_state = np.array(get_initial_state_4d(200.0))
             else:
                 initial_state = np.array([0.017, 0, 0, 1.0])
-        
+
+        # Detect dimensionality from state size
+        state_dim = len(initial_state)
+        is_3d = enable_3d or (state_dim >= 6)
+
         # Compute physics-aware bias field
-        if CORE_AVAILABLE:
+        if CORE_AVAILABLE and not is_3d:
+            # 2D physics-aware bias (only available for 2D)
             ref_traj = compute_reference_trajectory_for_bias(
-                num_steps, dt, thrust_accel, 
-                jnp.array(initial_state[:4]), 
+                num_steps, dt, thrust_accel,
+                jnp.array(initial_state[:4]),
                 fuel_budget_fraction
             )
             bias_field = compute_physics_bias_field(
@@ -186,9 +195,14 @@ class SimulatedQuantumAnnealer:
             )
             physics_bias = np.array(bias_field)
         else:
-            # Simple linear bias
+            # Simplified bias for 3D or when core unavailable
+            # Linear decay: Start with higher thrust, decrease over time
+            # This encourages early orbit raising
             physics_bias = np.linspace(0.5, -1.0, num_steps)
             physics_bias += (fuel_budget_fraction - 0.5) * 2.0
+
+            if is_3d:
+                print("[ISING-3D] Using simplified bias field (physics-aware bias is 2D only)")
         
         # Oversample for filtering
         oversample_factor = 3
@@ -241,7 +255,9 @@ class SimulatedQuantumAnnealer:
                 "coupling_strength": coupling_strength,
                 "fuel_budget_fraction": fuel_budget_fraction,
                 "valid_fraction": float(jnp.sum(valid_mask) / len(valid_mask)),
-                "physics_guided": CORE_AVAILABLE
+                "physics_guided": CORE_AVAILABLE and not is_3d,
+                "dimension": "3D" if is_3d else "2D",  # NEW
+                "state_size": state_dim  # NEW
             }
         }
 
@@ -265,7 +281,8 @@ class IterativeQuantumOptimizer:
         fuel_budget_fraction: float = 0.4,
         initial_state: Optional[np.ndarray] = None,
         thrust_accel: float = 0.01,
-        dt: float = 0.01
+        dt: float = 0.01,
+        enable_3d: bool = False  # NEW: 3D support
     ):
         """Initialize optimizer."""
         self.num_steps = num_steps
@@ -275,7 +292,8 @@ class IterativeQuantumOptimizer:
         self.fuel_budget_fraction = fuel_budget_fraction
         self.thrust_accel = thrust_accel
         self.dt = dt
-        
+        self.enable_3d = enable_3d  # NEW
+
         # Initialize state
         if initial_state is None:
             if CORE_AVAILABLE:
@@ -283,19 +301,32 @@ class IterativeQuantumOptimizer:
             else:
                 self.initial_state = np.array([0.017, 0, 0, 1.0])
         else:
-            self.initial_state = initial_state[:4] if len(initial_state) > 4 else initial_state
-        
+            # Keep full state for 3D (6-7 components)
+            if enable_3d or len(initial_state) >= 6:
+                self.initial_state = initial_state
+                self.enable_3d = True
+            else:
+                self.initial_state = initial_state[:4] if len(initial_state) > 4 else initial_state
+
+        # Detect dimensionality
+        state_dim = len(self.initial_state)
+        is_3d = self.enable_3d or (state_dim >= 6)
+
         # Initialize bias field
-        if CORE_AVAILABLE:
+        if CORE_AVAILABLE and not is_3d:
+            # Physics-aware bias for 2D
             ref_traj = compute_reference_trajectory_for_bias(
-                num_steps, dt, thrust_accel, 
-                jnp.array(self.initial_state), 
+                num_steps, dt, thrust_accel,
+                jnp.array(self.initial_state[:4]),
                 fuel_budget_fraction
             )
             self.bias_field = np.array(compute_physics_bias_field(num_steps, ref_traj, fuel_budget_fraction))
         else:
+            # Simplified bias for 3D
             self.bias_field = np.linspace(0.2, -0.5, num_steps)
-        
+            if is_3d:
+                print("[ISING-3D-OPTIMIZER] Initialized with 3D state, using simplified bias")
+
         self.annealer = SimulatedQuantumAnnealer()
         self.iteration = 0
         self.best_cost = float('inf')

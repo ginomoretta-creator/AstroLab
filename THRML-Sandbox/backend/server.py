@@ -43,6 +43,29 @@ except ImportError:
     STORAGE_AVAILABLE = False
     print("Run storage not available")
 
+# Import trajectory analysis
+try:
+    from trajectory_analysis import analyze_full_trajectory, export_trajectory_to_json
+    ANALYSIS_AVAILABLE = True
+except ImportError:
+    ANALYSIS_AVAILABLE = False
+    print("Trajectory analysis not available")
+
+# Import quantum solver (Ising model with D-Wave Neal)
+try:
+    # Add QNTM-Sandbox to path
+    qntm_backend = os.path.join(project_root, 'QNTM-Sandbox', 'backend')
+    if qntm_backend not in sys.path:
+        sys.path.insert(0, qntm_backend)
+
+    from quantum_solver import SimulatedQuantumAnnealer, IterativeQuantumOptimizer
+    QUANTUM_SOLVER_AVAILABLE = True
+    print("[QUANTUM] D-Wave Neal Ising solver available")
+except ImportError as e:
+    QUANTUM_SOLVER_AVAILABLE = False
+    print(f"[QUANTUM] Ising solver not available: {e}")
+    print("[QUANTUM] Falling back to temperature-based hybrid method")
+
 app = FastAPI(title="Cislunar Trajectory Sandbox API")
 
 # CORS
@@ -63,14 +86,14 @@ else:
 
 class SimulationRequest(BaseModel):
     # Schedule/trajectory parameters
-    num_steps: int = 120000  # More steps for longer trajectories (~250 days)
-    batch_size: int = 100  # Increased for better exploration
+    num_steps: int = 165000  # Long simulation for low-thrust missions (~716 days with dt=0.001, +10% margin)
+    batch_size: int = 50  # Reduced for memory efficiency
     coupling_strength: float = 0.5
 
     # Physical Parameters
-    mass: float = 500.0 # kg (smaller sat for realistic low-thrust)
-    thrust: float = 0.5 # N (typical Hall thruster)
-    isp: float = 3000.0 # s (Hall thruster Isp)
+    mass: float = 400.0 # kg (SMART-1-like spacecraft)
+    thrust: float = 0.07 # N (70 mN, low-thrust Hall thruster similar to SMART-1)
+    isp: float = 1640.0 # s (Hall thruster Isp, SMART-1 value)
     apogee_altitude: float = 400.0 # km (Apogee altitude above Earth)
     perigee_altitude: float = 200.0 # km (Perigee altitude above Earth)
 
@@ -78,7 +101,7 @@ class SimulationRequest(BaseModel):
     method: Literal["classical", "hybrid"] = "classical"
 
     # Advanced
-    dt: float = 0.0005  # Very small steps for smooth trajectories (35000 * 0.0005 = 17.5 norm time = ~76 days)
+    dt: float = 0.001  # Balanced timestep for low-thrust (150000 * 0.001 = 150 norm time = ~650 days)
     num_iterations: int = 30  # More iterations for convergence
 
     # Demo mode: scales thrust up for faster visualization during development
@@ -98,14 +121,26 @@ MU = 0.01215
 
 @app.get("/")
 def read_root():
+    hybrid_description = "Ising Hamiltonian with D-Wave Neal simulated annealing (2D/3D)"
+    if not QUANTUM_SOLVER_AVAILABLE:
+        hybrid_description += " (fallback: temperature-based sampling)"
+
     return {
         "status": "online",
         "system": "ASL-Sandbox Backend",
         "core_available": CORE_AVAILABLE,
+        "quantum_solver_available": QUANTUM_SOLVER_AVAILABLE,
         "methods": {
             "classical": "Cross-Entropy Method (CEM) - Pure classical optimization",
-            "hybrid": "Quantum annealing + classical refinement"
-        }
+            "hybrid": hybrid_description
+        },
+        "quantum_solver": {
+            "available": QUANTUM_SOLVER_AVAILABLE,
+            "model": "1D Ising chain with ferromagnetic coupling",
+            "sampler": "D-Wave Neal SimulatedAnnealingSampler",
+            "energy": "E = -J * Σ s_i*s_{i+1} - Σ h_i*s_i",
+            "dimensions": "2D and 3D supported"
+        } if QUANTUM_SOLVER_AVAILABLE else None
     }
 
 def get_initial_state(apogee_km, perigee_km, enable_3d=False, inclination_deg=0.0, raan_deg=0.0):
@@ -123,16 +158,82 @@ def get_initial_state(apogee_km, perigee_km, enable_3d=False, inclination_deg=0.
         [x, y, vx, vy] for 2D or [x, y, z, vx, vy, vz] for 3D (mass excluded) in normalized rotating frame
     """
     if enable_3d:
-        # Use core's 3D initial state generator
-        try:
-            from core.physics_core import get_parking_orbit_state_3d
-            # Use perigee altitude for circular orbit approximation
-            state_7d = get_parking_orbit_state_3d(perigee_km, inclination_deg, raan_deg)
-            # Return without mass for compatibility with existing code
-            return state_7d[:6].tolist()
-        except ImportError:
-            print("[WARNING] 3D mode requested but core module unavailable, falling back to 2D", flush=True)
-            enable_3d = False
+        # Calculate elliptical orbit in 3D
+        # First, calculate in the orbital plane, then rotate to desired inclination/RAAN
+        R_EARTH_KM = 6378.0
+        L_MOON_KM = 384400.0
+
+        # Convert altitudes to radii
+        r_apogee = R_EARTH_KM + apogee_km
+        r_perigee = R_EARTH_KM + perigee_km
+
+        # Semi-major axis and eccentricity
+        a = (r_apogee + r_perigee) / 2.0
+        e = (r_apogee - r_perigee) / (r_apogee + r_perigee)
+
+        print(f"[3D ORBIT DEBUG] Apogee: {apogee_km} km, Perigee: {perigee_km} km", flush=True)
+        print(f"[3D ORBIT DEBUG] Semi-major axis: {a:.1f} km, Eccentricity: {e:.4f}", flush=True)
+        if e < 0.001:
+            print(f"[3D ORBIT WARNING] Orbit is essentially CIRCULAR (e={e:.6f})", flush=True)
+        elif e < 0.05:
+            print(f"[3D ORBIT INFO] Orbit is nearly circular (e={e:.6f}). Increase apogee-perigee difference for more elliptical orbit.", flush=True)
+
+        # Start at perigee in orbital plane (x-axis)
+        r_norm = r_perigee / L_MOON_KM
+        a_norm = a / L_MOON_KM
+
+        # Velocity at perigee using vis-viva equation
+        v_perigee = np.sqrt((1 - MU) * (2.0 / r_norm - 1.0 / a_norm))
+
+        print(f"[3D ORBIT DEBUG] Perigee velocity: {v_perigee:.6f} (normalized), {v_perigee * 1.025:.3f} km/s", flush=True)
+
+        # Initial state in orbital plane (perigee on x-axis, velocity in y direction)
+        # In inertial frame centered on Earth
+        pos_orbital = np.array([r_norm, 0.0, 0.0])
+        vel_orbital = np.array([0.0, v_perigee, 0.0])
+
+        # Rotation matrices for inclination and RAAN
+        inc_rad = np.deg2rad(inclination_deg)
+        raan_rad = np.deg2rad(raan_deg)
+
+        # Rotation matrix: R_z(RAAN) * R_x(inclination)
+        cos_i, sin_i = np.cos(inc_rad), np.sin(inc_rad)
+        cos_raan, sin_raan = np.cos(raan_rad), np.sin(raan_rad)
+
+        R_x = np.array([
+            [1, 0, 0],
+            [0, cos_i, -sin_i],
+            [0, sin_i, cos_i]
+        ])
+
+        R_z = np.array([
+            [cos_raan, -sin_raan, 0],
+            [sin_raan, cos_raan, 0],
+            [0, 0, 1]
+        ])
+
+        R = R_z @ R_x
+
+        # Apply rotation to get position and velocity in inertial frame
+        pos_inertial = R @ pos_orbital
+        vel_inertial = R @ vel_orbital
+
+        # Transform to rotating frame (CR3BP)
+        # Position: shift to rotating frame origin (Earth at -MU, 0, 0)
+        x = -MU + pos_inertial[0]
+        y = pos_inertial[1]
+        z = pos_inertial[2]
+
+        # Velocity: v_rotating = v_inertial - omega × r
+        # omega = [0, 0, 1] (rotation about z-axis with omega = 1 in normalized units)
+        # omega × r = [-y, x, 0]
+        vx = vel_inertial[0] + y
+        vy = vel_inertial[1] - x
+        vz = vel_inertial[2]
+
+        print(f"[3D ORBIT DEBUG] Initial state: pos=[{x:.4f}, {y:.4f}, {z:.4f}], vel=[{vx:.4f}, {vy:.4f}, {vz:.4f}]", flush=True)
+
+        return [x, y, z, vx, vy, vz]
 
     # 2D Mode (existing logic)
     R_EARTH_KM = 6378.0
@@ -148,6 +249,10 @@ def get_initial_state(apogee_km, perigee_km, enable_3d=False, inclination_deg=0.
 
     print(f"[ORBIT DEBUG] Apogee: {apogee_km} km, Perigee: {perigee_km} km", flush=True)
     print(f"[ORBIT DEBUG] Semi-major axis: {a:.1f} km, Eccentricity: {e:.4f}", flush=True)
+    if e < 0.001:
+        print(f"[ORBIT WARNING] Orbit is essentially CIRCULAR (e={e:.6f})", flush=True)
+    elif e < 0.05:
+        print(f"[ORBIT INFO] Orbit is nearly circular (e={e:.6f}). Increase apogee-perigee difference for more elliptical orbit.", flush=True)
 
     # Start at perigee (closest approach)
     r_norm = r_perigee / L_MOON_KM
@@ -257,7 +362,9 @@ def run_simulation(req: SimulationRequest):
             # Clamp timestep for stability (normalized units) - allow larger dt for long simulations
             dt = float(np.clip(req.dt, 0.0005, 0.05))
 
+            print(f"[DEBUG] Starting iteration loop: {req.num_iterations} iterations", flush=True)
             for i in range(req.num_iterations):
+                print(f"[DEBUG] ===== ITERATION {i+1}/{req.num_iterations} START =====", flush=True)
                 # New randomness each iteration to avoid repeating schedules
                 key, sample_key = jax.random.split(key)
                 sample_key, sched_key = jax.random.split(sample_key)
@@ -276,29 +383,65 @@ def run_simulation(req: SimulationRequest):
 
                 elif req.method == "hybrid":
                     # Hybrid Quantum-Classical Method:
-                    # Simulated quantum annealing with temperature schedule
-                    # Temperature decreases over iterations to simulate quantum annealing
+                    # Uses D-Wave Neal simulated annealing on Ising Hamiltonian
+                    # E = -J * Σ s_i * s_{i+1} - Σ h_i * s_i
 
-                    # Calculate annealing temperature (starts hot, ends cold)
-                    temperature = 1.0 - (i / req.num_iterations)  # 1.0 -> 0.0
+                    if QUANTUM_SOLVER_AVAILABLE:
+                        # TRUE ISING SOLVER (D-Wave Neal) - NOW SUPPORTS 3D!
+                        # Create annealer with temperature schedule based on iteration
+                        beta_min = 0.1  # High temperature (exploration)
+                        beta_max = 10.0 * (1 + i / req.num_iterations)  # Increasing inverse temperature
 
-                    if current_bias is not None:
-                        # Apply temperature to bias (hot = more random, cold = more biased)
-                        # Use max(temperature, 0.1) to avoid division by near-zero
-                        temp_factor = max(temperature, 0.1)
-                        biased_probs = jax.nn.sigmoid(current_bias / temp_factor)
+                        # TEMPORARY: Reduced sweeps for faster debugging (was 1000)
+                        annealer = SimulatedQuantumAnnealer(
+                            num_reads=req.batch_size,
+                            num_sweeps=200,  # Reduced for speed during debug
+                            beta_range=(beta_min, beta_max)
+                        )
+                        print(f"[DEBUG] Created Ising annealer with {req.batch_size} reads, 200 sweeps", flush=True)
+
+                        # Convert current_bias to physics bias field
+                        if current_bias is not None:
+                            # Normalize bias to reasonable range for Ising model
+                            physics_bias_field = np.array(current_bias * 2.0)  # Scale for Ising
+                        else:
+                            physics_bias_field = np.zeros(req.num_steps)
+
+                        # Sample from Ising model
+                        print(f"[DEBUG] Calling Ising sampler (num_steps={req.num_steps})...", flush=True)
+                        result = annealer.generate_thrust_schedules(
+                            num_steps=req.num_steps,
+                            batch_size=req.batch_size,
+                            coupling_strength=req.coupling_strength,
+                            physics_bias_field=physics_bias_field
+                        )
+
+                        schedules = result['schedules']
+                        ising_energies = result['energies']
+
+                        mode_str = "3D" if req.enable_3d else "2D"
+                        print(f"[HYBRID-ISING-{mode_str}] Iteration {i+1}: Beta={beta_max:.2f}, Mean energy={float(jnp.mean(ising_energies)):.2f}, Mean thrust={float(jnp.mean(schedules)):.3f}", flush=True)
+                        print(f"[DEBUG] Ising sampling completed, got {len(schedules)} schedules", flush=True)
+
                     else:
-                        biased_probs = jnp.ones(req.num_steps) * 0.4
+                        # FALLBACK: Temperature-based sampling (only if solver unavailable)
+                        print(f"[HYBRID-FALLBACK] Using temperature-based method (Ising solver not available)")
 
-                    # Use uniform random instead of normal to avoid Windows JAX issues
-                    # Add uniform noise for quantum-like exploration (decreases with temperature)
-                    noise_key, sample_key = jax.random.split(sample_key)
-                    noise = (jax.random.uniform(noise_key, shape=(req.num_steps,)) - 0.5) * temperature * 0.3
-                    final_probs = jnp.clip(biased_probs + noise, 0.0, 1.0)
+                        temperature = 1.0 - (i / req.num_iterations)
 
-                    schedules = jax.random.bernoulli(sample_key, final_probs, shape=(req.batch_size, req.num_steps)).astype(jnp.float32)
+                        if current_bias is not None:
+                            temp_factor = max(temperature, 0.1)
+                            biased_probs = jax.nn.sigmoid(current_bias / temp_factor)
+                        else:
+                            biased_probs = jnp.ones(req.num_steps) * 0.4
 
-                    print(f"[HYBRID DEBUG] Iteration {i+1}: Temperature={temperature:.3f}, Mean prob={float(jnp.mean(final_probs)):.3f}")
+                        noise_key, sample_key = jax.random.split(sample_key)
+                        noise = (jax.random.uniform(noise_key, shape=(req.num_steps,)) - 0.5) * temperature * 0.3
+                        final_probs = jnp.clip(biased_probs + noise, 0.0, 1.0)
+
+                        schedules = jax.random.bernoulli(sample_key, final_probs, shape=(req.batch_size, req.num_steps)).astype(jnp.float32)
+
+                        print(f"[HYBRID-TEMP] Iteration {i+1}: Temperature={temperature:.3f}, Mean prob={float(jnp.mean(final_probs)):.3f}")
 
                 # Enforce reasonable fuel fractions by replacing outliers
                 thrust_fractions = jnp.mean(schedules, axis=1)
@@ -316,6 +459,7 @@ def run_simulation(req: SimulationRequest):
                         # Add mass component to get [x, y, z, vx, vy, vz, m] (7 elements)
                         init_state_with_mass = jnp.append(init_state_arr, 1.0)
                         # Use pre-calculated normalized thrust and ISP
+                        print(f"[DEBUG] Starting 3D propagation with {len(schedules)} trajectories...", flush=True)
                         trajectories = batch_propagate_with_mass_3d(
                             init_state_with_mass,
                             schedules,
@@ -325,6 +469,7 @@ def run_simulation(req: SimulationRequest):
                             req.num_steps,
                             req.thrust_mode
                         )
+                        print(f"[DEBUG] 3D propagation completed!", flush=True)
                         print(f"[3D DEBUG] Initial state shape: {init_state_with_mass.shape}, Trajectories shape: {trajectories.shape}", flush=True)
                     except ImportError:
                         print("[ERROR] 3D mode requires core module with batch_propagate_with_mass_3d", flush=True)
@@ -468,6 +613,10 @@ def run_simulation(req: SimulationRequest):
                 capture_distance_np = np.array(capture_distance)
                 best_capture_dist = float(capture_distance_np[best_idx]) if best_captured else None
 
+                # Get capture timestep for best trajectory
+                capture_timesteps_np = np.array(capture_timesteps)
+                best_capture_timestep = int(capture_timesteps_np[best_idx]) if best_captured else None
+
                 # Get indices to send: Top 5 by min distance + Random 5
                 sorted_indices = np.argsort(min_dists_np)
                 top_indices = sorted_indices[:5]
@@ -479,6 +628,8 @@ def run_simulation(req: SimulationRequest):
 
                 # Calculate enhanced metrics for this iteration
                 enhanced_metrics = {}
+                orbital_snapshots = {}
+
                 if CORE_AVAILABLE:
                     try:
                         # Delta-V metrics
@@ -514,6 +665,50 @@ def run_simulation(req: SimulationRequest):
                     except Exception as e:
                         print(f"[METRICS WARNING] Failed to calculate enhanced metrics: {e}")
 
+                # Add orbital parameter snapshots at key points
+                if ANALYSIS_AVAILABLE:
+                    try:
+                        from trajectory_analysis import compute_orbital_elements_at_timestep
+
+                        # Sample orbital parameters at key timesteps
+                        # Start, 25%, 50%, 75%, End
+                        sample_indices = [
+                            0,
+                            len(best_trajectory) // 4,
+                            len(best_trajectory) // 2,
+                            3 * len(best_trajectory) // 4,
+                            len(best_trajectory) - 1
+                        ]
+
+                        snapshots = {}
+                        for idx in sample_indices:
+                            state = best_trajectory[idx]
+                            elements = compute_orbital_elements_at_timestep(state)
+
+                            # Calculate time in days
+                            time_days = idx * dt * T_STAR / 86400.0
+
+                            # Store key parameters
+                            progress = idx / (len(best_trajectory) - 1)
+                            snapshots[f"{int(progress*100)}%"] = {
+                                'timestep': int(idx),
+                                'time_days': float(time_days),
+                                'altitude_km': elements['altitude_km'],
+                                'dist_moon_km': elements['dist_moon_km'],
+                                'velocity_kms': elements['velocity_mag_kms'],
+                                'eccentricity': elements['eccentricity'],
+                                'perigee_km': elements['perigee_altitude_km'],
+                                'apogee_km': elements['apogee_altitude_km'],
+                                'orbit_type': elements['orbit_type'],
+                            }
+
+                        orbital_snapshots = snapshots
+
+                    except Exception as e:
+                        print(f"[ORBITAL SNAPSHOTS WARNING] Failed to compute: {e}")
+                        import traceback
+                        print(traceback.format_exc())
+
                 chunk_data = {
                     "iteration": i + 1,
                     "total_iterations": req.num_iterations,
@@ -530,14 +725,18 @@ def run_simulation(req: SimulationRequest):
                     "radial_penalty": float(np.mean(radial_penalty)),
                     "captured": best_captured,  # Lunar capture flag
                     "capture_distance": best_capture_dist,  # Distance at capture
-                    "metrics": enhanced_metrics  # Enhanced metrics
+                    "capture_timestep": best_capture_timestep,  # Timestep when capture occurred
+                    "metrics": enhanced_metrics,  # Enhanced metrics
+                    "orbital_snapshots": orbital_snapshots  # NEW: Orbital parameters at key points
                 }
 
                 # Enhanced logging with capture status
                 capture_msg = f" >> CAPTURED at {best_capture_dist*384.4:.0f}km" if best_captured else ""
                 print(f"[{req.method.upper()}] Iteration {i+1}/{req.num_iterations}: Best dist={best_distance:.4f}, Success={success_rate:.0%}{capture_msg}", flush=True)
 
+                print(f"[DEBUG] Yielding iteration {i+1} data to frontend...", flush=True)
                 yield json.dumps(chunk_data) + "\n"
+                print(f"[DEBUG] ===== ITERATION {i+1} COMPLETE =====", flush=True)
                 
         except Exception as e:
             import traceback
@@ -846,6 +1045,118 @@ def export_matlab(req: CompareRunsRequest):
         media_type="application/octet-stream",
         headers={"Content-Disposition": "attachment; filename=runs_export.mat"}
     )
+
+
+# =============================================================================
+# Detailed Trajectory Analysis Endpoint
+# =============================================================================
+
+class DetailedAnalysisRequest(BaseModel):
+    """Request for detailed trajectory analysis."""
+    trajectory: List[List[float]]  # Full trajectory data
+    schedule: List[float]  # Thrust schedule
+    params: SimulationRequest  # Simulation parameters
+
+@app.post("/analyze/detailed")
+def get_detailed_analysis(req: DetailedAnalysisRequest):
+    """
+    Analyze a trajectory and return detailed orbital parameters for each timestep.
+
+    This endpoint computes:
+    - Orbital elements (a, e, i, Ω, ω, ν) for each timestep
+    - Distance to Earth and Moon
+    - Velocity magnitude
+    - Apogee and perigee altitudes
+    - Periapsis/apoapsis event detection
+    - Delta-V and fuel consumption
+
+    Returns a comprehensive JSON with per-timestep data.
+    """
+    if not ANALYSIS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Trajectory analysis module not available")
+
+    try:
+        # Convert inputs to numpy
+        trajectory_np = np.array(req.trajectory)
+        schedule_np = np.array(req.schedule)
+
+        # Run analysis
+        analysis = analyze_full_trajectory(
+            trajectory_np,
+            schedule_np,
+            req.params.dt,
+            req.params.thrust,
+            req.params.mass,
+            req.params.isp
+        )
+
+        return analysis
+
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"[ERROR] Analysis failed:", flush=True)
+        print(error_msg, flush=True)
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@app.post("/export/trajectory_json")
+def export_trajectory_json_endpoint(req: DetailedAnalysisRequest):
+    """
+    Export detailed trajectory analysis as a downloadable JSON file.
+
+    This provides the same data as /analyze/detailed but as a downloadable file.
+    Ideal for offline analysis, plotting, or importing into other tools.
+    """
+    if not ANALYSIS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Trajectory analysis module not available")
+
+    try:
+        # Convert inputs to numpy
+        trajectory_np = np.array(req.trajectory)
+        schedule_np = np.array(req.schedule)
+
+        # Run analysis
+        analysis = analyze_full_trajectory(
+            trajectory_np,
+            schedule_np,
+            req.params.dt,
+            req.params.thrust,
+            req.params.mass,
+            req.params.isp
+        )
+
+        # Add metadata
+        analysis['metadata'] = {
+            'method': req.params.method,
+            'num_steps': req.params.num_steps,
+            'batch_size': req.params.batch_size,
+            'mass_kg': req.params.mass,
+            'thrust_N': req.params.thrust,
+            'isp_s': req.params.isp,
+            'apogee_altitude_km': req.params.apogee_altitude,
+            'perigee_altitude_km': req.params.perigee_altitude,
+            'dt_normalized': req.params.dt,
+            'enable_3d': req.params.enable_3d,
+            'inclination_deg': req.params.inclination_deg if req.params.enable_3d else 0.0,
+            'raan_deg': req.params.raan_deg if req.params.enable_3d else 0.0,
+        }
+
+        # Convert to JSON
+        json_content = json.dumps(analysis, indent=2)
+
+        return StreamingResponse(
+            io.StringIO(json_content),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=trajectory_detailed_analysis.json"}
+        )
+
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"[ERROR] Export failed:", flush=True)
+        print(error_msg, flush=True)
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 
 if __name__ == "__main__":
