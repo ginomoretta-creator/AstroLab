@@ -1,11 +1,3 @@
-# AstroLab
-
-Welcome to the AstroLab project! This repository contains the source code for the application.
-
-## Getting Started for Developers
-
-To collaborate on this project, you'll need to set up your development environment. Since we don't commit the compiled executables (like `.exe` files) to GitHub, you will run the application directly from the source code.
-
 ### Prerequisites
 
 - **Node.js**: [Download and install](https://nodejs.org/)
@@ -60,7 +52,3 @@ cd THRML-Sandbox/backend
 # or
 python Launcher.py
 ```
-
-## Collaborating with Antigravity
-
-If you are using Antigravity, simply open this folder and ask the agent to "Start the development server". It will handle running the commands for you!
