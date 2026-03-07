@@ -1,23 +1,9 @@
 """
-Classical Direct Collocation Solver for Trajectory Optimization
-================================================================
+CasADi/IPOPT direct collocation solver for refining binary thrust
+schedules into dynamically feasible, fuel-optimal trajectories.
 
-This module provides a classical optimal control solver using CasADi
-and IPOPT for refining discrete thrust schedules into dynamically
-feasible trajectories.
-
-The warm-starting workflow:
-1. Binary schedule → Smooth profile (moving average)
-2. Forward propagation → Initial state guess
-3. Direct collocation with IPOPT → Locally optimal trajectory
-
-Key Features:
-- CR3BP dynamics with mass depletion
-- Fuel-optimal objective (maximize final mass)
-- Flexible constraints (lunar capture, velocity bounds)
-- Warm-start iteration counting for benchmarks
-
-Author: ASL-Sandbox Team
+Workflow: binary schedule -> smooth profile -> forward propagation
+initial guess -> direct collocation with IPOPT.
 """
 
 import numpy as np
@@ -45,11 +31,6 @@ except ImportError:
     print("WARNING: CasADi not available. Classical solver disabled.")
     print("Install with: pip install casadi")
 
-
-# =============================================================================
-# Data Structures
-# =============================================================================
-
 @dataclass
 class SolverResult:
     """Result from classical trajectory optimization."""
@@ -73,11 +54,6 @@ class SolverResult:
             'solve_time_seconds': self.solve_time_seconds,
             'message': self.message
         }
-
-
-# =============================================================================
-# Schedule Smoothing
-# =============================================================================
 
 def smooth_schedule(
     binary_schedule: np.ndarray,
@@ -119,11 +95,6 @@ def smooth_schedule(
         smoothed = np.pad(smoothed, (0, len(binary_schedule) - len(smoothed)), mode='edge')
     
     return np.clip(smoothed, 0, 1)
-
-
-# =============================================================================
-# Forward Propagation (NumPy for initial guess)
-# =============================================================================
 
 def propagate_trajectory_numpy(
     x0: np.ndarray,
@@ -195,11 +166,6 @@ def _dynamics_numpy(state: np.ndarray, thrust_mag: float, isp_normalized: float)
         mdot = 0.0
     
     return np.array([vx, vy, ax_grav + ax_thrust, ay_grav + ay_thrust, mdot])
-
-
-# =============================================================================
-# CasADi Direct Collocation Solver
-# =============================================================================
 
 def create_collocation_problem(
     x0: np.ndarray,
@@ -396,11 +362,6 @@ def create_collocation_problem(
             message=str(e)
         )
 
-
-# =============================================================================
-# Warm-Start Comparison
-# =============================================================================
-
 def measure_warmstart_benefit(
     x0: np.ndarray,
     structured_schedule: np.ndarray,
@@ -498,11 +459,6 @@ def compute_iteration_statistics(results: Dict[str, SolverResult]) -> Dict[str, 
     
     return stats
 
-
-# =============================================================================
-# Simplified Solver (for quick tests)
-# =============================================================================
-
 def quick_refine(
     binary_schedule: np.ndarray,
     x0: np.ndarray,
@@ -537,11 +493,6 @@ def quick_refine(
         isp_normalized=isp_normalized,
         lunar_capture_radius=lunar_capture_radius
     )
-
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 __all__ = [
     'smooth_schedule',

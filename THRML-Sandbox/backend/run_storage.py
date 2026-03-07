@@ -1,16 +1,6 @@
 """
-Run Storage System for Trajectory Analysis
-===========================================
-
-File-based storage system for simulation runs using JSON format.
-
-Features:
-- Store up to 50 runs with auto-cleanup
-- JSON file storage for easy sharing
-- Run metadata and full iteration history
-- Filtering and search capabilities
-
-Author: ASL-Sandbox Team
+File-based JSON storage for simulation runs with auto-cleanup,
+metadata, iteration history, and search capabilities.
 """
 
 import json
@@ -242,11 +232,6 @@ class RunStorage:
             'methods': methods
         }
 
-
-# =============================================================================
-# Comparison Utilities
-# =============================================================================
-
 def compare_runs(run_ids: List[str], storage: RunStorage) -> Dict:
     """
     Generate comparison statistics for multiple runs.
@@ -315,11 +300,6 @@ def compare_runs(run_ids: List[str], storage: RunStorage) -> Dict:
             run_summary['cost_relative'] = ((run_summary['final_cost'] - best_cost) / best_cost) * 100
 
     return comparison
-
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 __all__ = [
     'RunStorage',

@@ -1,18 +1,8 @@
 """
-Core Physics Engine for CR3BP Low-Thrust Trajectory Propagation
-================================================================
+CR3BP low-thrust trajectory propagation with mass depletion.
 
-This module provides the unified physics engine for both THRML-Sandbox and
-QNTM-Sandbox projects. Key features:
-
-- 5-state dynamics [x, y, vx, vy, m] with mass depletion
-- Fuel consumption via specific impulse (Isp)
-- Mass-dependent thrust acceleration
-- Perigee/apoapsis detection for physics-aware sampling
-- JAX-accelerated batch propagation
-- CasADi-compatible NumPy implementations
-
-Author: ASL-Sandbox Team
+Supports 2D (5-state) and 3D (7-state) dynamics, JAX batch propagation,
+and orbital mechanics utilities for the Earth-Moon system.
 """
 
 import jax
@@ -23,13 +13,10 @@ from typing import Tuple, Optional, NamedTuple
 
 from .constants import (
     MU, EPSILON, G0_NORM, G0_MS2, A_STAR_MS2, T_STAR_S, L_STAR_KM,
-    EARTH_POS, MOON_POS, R_EARTH_NORM, R_MOON_NORM, LUNAR_SOI_NORM
+    EARTH_POS, MOON_POS, EARTH_POS_3D, MOON_POS_3D,
+    R_EARTH_NORM, R_MOON_NORM, LUNAR_SOI_NORM
 )
 
-
-# =============================================================================
-# Data Structures
-# =============================================================================
 
 class TrajectoryResult(NamedTuple):
     """Result of trajectory propagation."""
@@ -48,11 +35,6 @@ class OrbitalElements(NamedTuple):
     true_anomaly: float
     is_at_periapsis: bool
     is_at_apoapsis: bool
-
-
-# =============================================================================
-# Core CR3BP Dynamics (5-State with Mass - 2D)
-# =============================================================================
 
 @jax.jit
 def equations_of_motion_with_mass(
@@ -111,11 +93,6 @@ def equations_of_motion_with_mass(
     )
 
     return jnp.array([vx, vy, ax_grav + ax_thrust, ay_grav + ay_thrust, mdot])
-
-
-# =============================================================================
-# 3D CR3BP Dynamics (7-State with Mass)
-# =============================================================================
 
 @partial(jax.jit, static_argnames=['thrust_mode'])
 def equations_of_motion_with_mass_3d(
@@ -233,11 +210,6 @@ def equations_of_motion_4state(
     
     return jnp.array([vx, vy, ax, ay])
 
-
-# =============================================================================
-# RK4 Integration
-# =============================================================================
-
 @jax.jit
 def rk4_step_with_mass(
     state: jnp.ndarray,
@@ -284,11 +256,6 @@ def rk4_step_4state(
     k4 = equations_of_motion_4state(state + dt * k3, thrust_accel)
     
     return state + (dt / 6.0) * (k1 + 2*k2 + 2*k3 + k4)
-
-
-# =============================================================================
-# Trajectory Propagation
-# =============================================================================
 
 @partial(jax.jit, static_argnames=['num_steps'])
 def propagate_trajectory_with_mass(
@@ -450,11 +417,6 @@ batch_propagate_4state = jax.vmap(
 # Alias for backwards compatibility
 batch_propagate = batch_propagate_4state
 
-
-# =============================================================================
-# Orbital Mechanics Utilities
-# =============================================================================
-
 @jax.jit
 def compute_distance_to_body(position: jnp.ndarray, body: str = "moon") -> float:
     """Compute distance from position to Earth or Moon."""
@@ -480,17 +442,19 @@ def compute_relative_velocity(state: jnp.ndarray, body: str = "moon") -> float:
 def detect_periapsis_apoapsis(trajectory: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Detect periapsis and apoapsis points in a trajectory (Earth-centered).
-    
+
     Args:
-        trajectory: (N, 4 or 5) state history
-        
+        trajectory: (N, 4+) state history (2D or 3D positions)
+
     Returns:
         periapsis_mask: (N,) boolean array, True at periapsis
         apoapsis_mask: (N,) boolean array, True at apoapsis
     """
-    # Compute distances to Earth
-    positions = trajectory[:, :2]
-    distances = jnp.linalg.norm(positions - EARTH_POS, axis=1)
+    # Compute distances to Earth (dimension-agnostic: 2D or 3D)
+    ndim = 3 if trajectory.shape[1] >= 6 else 2
+    positions = trajectory[:, :ndim]
+    earth_pos = EARTH_POS_3D[:ndim] if ndim == 3 else EARTH_POS
+    distances = jnp.linalg.norm(positions - earth_pos, axis=1)
     
     # Find local minima (periapsis) and maxima (apoapsis)
     # Compare each point to its neighbors
@@ -560,11 +524,6 @@ def compute_osculating_elements(state: jnp.ndarray, mu_earth: float = 1 - MU) ->
         is_at_apoapsis=bool(is_apoapsis)
     )
 
-
-# =============================================================================
-# Fuel Budget and Constraints
-# =============================================================================
-
 def check_fuel_budget(
     schedule: jnp.ndarray,
     thrust_magnitude: float,
@@ -621,11 +580,6 @@ def compute_fuel_consumed(
     mass_flow_rate = thrust_magnitude / (isp_normalized * G0_NORM)
     return mass_flow_rate * total_burn_time
 
-
-# =============================================================================
-# Cost Functions
-# =============================================================================
-
 @jax.jit
 def compute_trajectory_cost(
     trajectory: jnp.ndarray,
@@ -676,11 +630,6 @@ def compute_trajectory_cost(
 
 
 batch_compute_cost = jax.vmap(compute_trajectory_cost, in_axes=(0, None, None, None))
-
-
-# =============================================================================
-# Validation Utilities
-# =============================================================================
 
 @jax.jit
 def compute_jacobi_constant(state: jnp.ndarray, mu: float = MU) -> float:
@@ -753,11 +702,6 @@ def validate_trajectory(
         'mass_valid': mass_valid,
         'is_valid': (jacobi_drift < max_jacobi_drift) and (max_dist < max_distance) and mass_valid
     }
-
-
-# =============================================================================
-# Initial State Generation
-# =============================================================================
 
 def get_parking_orbit_state(
     altitude_km: float = 200.0,
@@ -888,11 +832,6 @@ def get_initial_state_4d(altitude_km: float = 200.0) -> jnp.ndarray:
     state_5d = get_parking_orbit_state(altitude_km)
     return state_5d[:4]
 
-
-# =============================================================================
-# Dimensionalization
-# =============================================================================
-
 def dimensionalize_trajectory(
     trajectory: jnp.ndarray,
     L_star: float = L_STAR_KM * 1000,  # meters
@@ -918,11 +857,6 @@ def dimensionalize_trajectory(
     # Mass remains unchanged (user should denormalize separately if needed)
     
     return result
-
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 __all__ = [
     # Core dynamics

@@ -1,19 +1,6 @@
 """
-Enhanced Metrics Module for Trajectory Analysis
-================================================
-
-This module provides comprehensive metrics for comparing classical and hybrid
-quantum-classical optimization methods in cislunar trajectory optimization.
-
-Key Metrics:
-- ΔV total: Total velocity change (Tsiolkovsky equation)
-- Time of flight: Mission duration in days
-- Fuel consumed: Propellant mass used
-- Cost breakdown: Decomposition of multi-objective cost function
-- Convergence rate: Speed of optimization convergence
-- Success metrics: Capture statistics
-
-Author: ASL-Sandbox Team
+Trajectory analysis metrics: delta-V, time of flight, cost breakdown,
+convergence rate, and capture statistics for classical vs hybrid comparison.
 """
 
 import jax
@@ -25,11 +12,6 @@ from .constants import (
     MU, L_STAR_KM, T_STAR_S, V_STAR_KMS, G0_NORM, G0_MS2,
     MOON_POS, EARTH_POS, LUNAR_SOI_NORM
 )
-
-
-# =============================================================================
-# Delta-V Calculations
-# =============================================================================
 
 def calculate_delta_v(
     schedule: np.ndarray,
@@ -105,11 +87,6 @@ def calculate_delta_v(
         'mass_fraction': float(final_mass / mass_initial)
     }
 
-
-# =============================================================================
-# Time of Flight
-# =============================================================================
-
 def calculate_time_of_flight(
     num_steps: int,
     dt: float,
@@ -151,11 +128,6 @@ def calculate_time_of_flight(
         'capture_time_days': float(capture_time_days) if capture_time_days is not None else None,
         'capture_time_norm': float(capture_time_norm) if capture_time_norm is not None else None
     }
-
-
-# =============================================================================
-# Cost Breakdown Analysis
-# =============================================================================
 
 def calculate_cost_breakdown(
     trajectory: np.ndarray,
@@ -275,11 +247,6 @@ def calculate_cost_breakdown(
         'captured': bool(has_captured)
     }
 
-
-# =============================================================================
-# Convergence Analysis
-# =============================================================================
-
 def calculate_convergence_rate(
     iteration_history: List[Dict]
 ) -> Dict[str, float]:
@@ -354,11 +321,6 @@ def calculate_convergence_rate(
         'final_cost': float(final_cost),
         'best_cost': float(costs[best_idx])
     }
-
-
-# =============================================================================
-# Success Metrics
-# =============================================================================
 
 def calculate_success_metrics(
     trajectories: np.ndarray,
@@ -442,11 +404,6 @@ def calculate_success_metrics(
         'mean_thrust_fraction': mean_thrust_fraction
     }
 
-
-# =============================================================================
-# Comprehensive Run Analysis
-# =============================================================================
-
 def analyze_run(
     iteration_history: List[Dict],
     best_trajectory: np.ndarray,
@@ -514,11 +471,6 @@ def analyze_run(
     }
 
     return comprehensive_metrics
-
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 __all__ = [
     'calculate_delta_v',

@@ -1,20 +1,7 @@
 """
-Benchmarking Suite for Trajectory Warm-Start Comparison
-========================================================
-
-This module provides comprehensive benchmarking tools for comparing
-different schedule generation methods:
-
-1. THRML (Probabilistic Gibbs Sampling)
-2. Quantum-Inspired (Simulated Annealing)
-3. Random Baseline (Bernoulli Sampling)
-
-Benchmarks:
-- Exploration Efficiency: How often do methods reach the Moon?
-- Solver Convergence: How many IPOPT iterations to optimal?
-- Computational Cost: Wall-clock time comparison
-
-Author: ASL-Sandbox Team
+Benchmarking tools for comparing schedule generation methods (probabilistic,
+quantum-inspired, random baseline) on exploration efficiency, solver
+convergence, and computational cost.
 """
 
 import sys
@@ -45,11 +32,6 @@ from core.physics_core import (
     compute_trajectory_cost
 )
 from core.energy_model import compute_physics_bias_field
-
-
-# =============================================================================
-# Data Structures
-# =============================================================================
 
 @dataclass
 class BenchmarkResult:
@@ -99,11 +81,6 @@ class BenchmarkConfig:
     success_threshold_normalized: float = 0.13  # ~50,000 km
     initial_altitude_km: float = 200.0
 
-
-# =============================================================================
-# Generators Registry
-# =============================================================================
-
 class GeneratorRegistry:
     """Registry for different schedule generation methods."""
     
@@ -149,11 +126,6 @@ class GeneratorRegistry:
     def list_methods(self) -> List[str]:
         """List available methods."""
         return list(self._generators.keys())
-
-
-# =============================================================================
-# Exploration Benchmark
-# =============================================================================
 
 class ExplorationBenchmark:
     """
@@ -266,11 +238,6 @@ class ExplorationBenchmark:
         
         return results
 
-
-# =============================================================================
-# Statistical Tests
-# =============================================================================
-
 def mann_whitney_test(
     distances_a: np.ndarray,
     distances_b: np.ndarray,
@@ -321,11 +288,6 @@ def compute_effect_size(
     mean_a, mean_b = np.mean(values_a), np.mean(values_b)
     std_pooled = np.sqrt((np.var(values_a) + np.var(values_b)) / 2)
     return (mean_b - mean_a) / (std_pooled + 1e-8)
-
-
-# =============================================================================
-# Benchmark Report Generator
-# =============================================================================
 
 class BenchmarkReporter:
     """Generates benchmark reports in various formats."""
@@ -395,11 +357,6 @@ class BenchmarkReporter:
         ])
         
         return "\n".join(lines)
-
-
-# =============================================================================
-# Full Benchmark Suite
-# =============================================================================
 
 class FullBenchmarkSuite:
     """
@@ -497,11 +454,6 @@ class FullBenchmarkSuite:
         print(f"Report saved to {output_path}")
         return str(json_path)
 
-
-# =============================================================================
-# Quick Benchmark Function
-# =============================================================================
-
 def quick_benchmark(
     n_samples: int = 100,
     num_steps: int = 200,
@@ -529,11 +481,6 @@ def quick_benchmark(
     results = benchmark.run_comparison(['random', 'biased_random'], n_samples, seed)
     
     return results
-
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 __all__ = [
     'BenchmarkResult',

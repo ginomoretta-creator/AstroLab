@@ -1,25 +1,9 @@
 """
-Quantum-Inspired Schedule Generation using Simulated Annealing
-==============================================================
+Binary thrust schedule generation via D-Wave Neal simulated annealing.
 
-This module provides binary thrust schedule generation using D-Wave's
-Neal simulated annealing sampler, which simulates quantum annealing behavior.
-
-Key Features:
-- Physics-aware external fields (bias toward optimal orbital phases)
-- 1D Ising chain with ferromagnetic coupling (smooth schedules)
-- Fuel budget filtering
-- Energy-based trajectory evaluation
-
-The Ising formulation:
-    E = -J * Σ s_i * s_{i+1} - h_i * Σ s_i
-    
-Where:
-    - s_i ∈ {-1, +1} (spin = thrust on/off)
-    - J > 0 encourages smooth thrust arcs
-    - h_i encodes physics priors (periapsis boost, arrival coast, etc.)
-
-Author: ASL-Sandbox Team
+Uses a 1D Ising chain (E = -J Σ s_i s_{i+1} - Σ h_i s_i) with
+physics-aware external fields and ferromagnetic coupling for smooth
+schedules. Includes fuel budget filtering and energy-based evaluation.
 """
 
 import sys
@@ -242,6 +226,8 @@ class SimulatedQuantumAnnealer:
                 output_schedules = jnp.tile(valid_schedules, (repeats, 1))[:batch_size]
                 output_energies = jnp.tile(valid_energies, repeats)[:batch_size]
             else:
+                print(f"[ISING WARNING] All {len(raw_schedules)} samples failed fuel filter. "
+                      f"Using unfiltered schedules — bias field may be degenerate.", flush=True)
                 output_schedules = raw_schedules[:batch_size]
                 output_energies = raw_energies[:batch_size]
         
@@ -387,11 +373,6 @@ class IterativeQuantumOptimizer:
             'fuel_budget_fraction': self.fuel_budget_fraction
         }
 
-
-# =============================================================================
-# Comparison Utilities
-# =============================================================================
-
 def generate_random_schedules(
     num_steps: int,
     batch_size: int,
@@ -453,11 +434,6 @@ def compare_methods(
             'mean_energy': None  # No energy model
         }
     }
-
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 # Import JAX for random schedules
 import jax

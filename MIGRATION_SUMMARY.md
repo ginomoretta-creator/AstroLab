@@ -118,8 +118,8 @@ casadi       # For classical trajectory optimization (tested but needs tuning)
    - Next steps
 
 **Updated Files**:
-1. **`CLAUDE.md`**
-   - Removed THRML references
+1. **`README.md`**
+   - Updated architecture documentation
    - Added classical vs hybrid architecture
    - Updated commands and examples
    - Documented success criteria (Moon SOI + velocity)
@@ -195,7 +195,7 @@ Quantify potential benefits of quantum hardware for trajectory optimization by c
 - `THRML-Sandbox/frontend/src/App.jsx` (default method)
 
 **Documentation**:
-- `CLAUDE.md` (architecture, commands, concepts)
+- `README.md` (architecture, commands, concepts)
 - `docs/CLASSICAL_VS_HYBRID_COMPARISON.md` (new)
 - `MIGRATION_SUMMARY.md` (new, this file)
 
@@ -281,7 +281,7 @@ curl -X POST http://localhost:8080/simulate \
 ## Questions?
 
 See:
-- `CLAUDE.md` - Developer guide
+- `README.md` - Developer guide
 - `docs/CLASSICAL_VS_HYBRID_COMPARISON.md` - Comparison framework details
 - `README.md` - Getting started
 

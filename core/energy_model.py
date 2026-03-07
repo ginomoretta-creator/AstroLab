@@ -1,20 +1,9 @@
 """
-Physics-Aware Energy Model for Ising-Based Trajectory Sampling
-===============================================================
+Physics-informed bias fields for the 1D Ising model thrust schedule sampling.
 
-This module provides physics-informed bias fields for the 1D Ising model
-used to generate thrust schedules. The key insight is that optimal low-thrust
-trajectories have predictable structure:
-
-- Thrust at periapsis (efficient for orbit raising)
-- Coast at apoapsis (except for plane changes)
-- Coast during lunar approach (for capture)
-- Respect fuel budget constraints
-
-By encoding this domain knowledge into the Ising energy function, we guide
-the sampling toward physically meaningful thrust patterns.
-
-Author: ASL-Sandbox Team
+Encodes orbital mechanics priors (periapsis thrust, apoapsis coast, arrival
+coast, fuel budget) into the Ising energy function to guide sampling toward
+physically meaningful thrust patterns.
 """
 
 import jax
@@ -22,17 +11,13 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Optional, Tuple, Dict, Any
 
-from .constants import MU, EARTH_POS, MOON_POS
+from .constants import MU, EARTH_POS, MOON_POS, EARTH_POS_3D, MOON_POS_3D
 from .physics_core import (
     propagate_trajectory_4state,
+    propagate_trajectory_with_mass_3d,
     detect_periapsis_apoapsis,
     get_initial_state_4d
 )
-
-
-# =============================================================================
-# Physics-Aware Bias Field Computation
-# =============================================================================
 
 def compute_physics_bias_field(
     num_steps: int,
@@ -62,8 +47,8 @@ def compute_physics_bias_field(
     
     Args:
         num_steps: Number of time steps in schedule
-        reference_trajectory: (N, 4) trajectory from reference propagation
-                            If None, uses a default spiral reference
+        reference_trajectory: (N, 4) or (N, 7) trajectory from reference propagation
+                            If None, uses a default spiral reference. Works with both 2D and 3D.
         fuel_budget_fraction: Target fraction of time with thrust on (0-1)
         arrival_coast_fraction: Fraction of trajectory to coast at end
         periapsis_boost: Positive bias strength at periapsis
@@ -120,41 +105,55 @@ def compute_reference_trajectory_for_bias(
     dt: float,
     thrust_accel: float,
     initial_state: Optional[jnp.ndarray] = None,
-    constant_thrust_fraction: float = 0.3
+    constant_thrust_fraction: float = 0.3,
+    isp_normalized: float = 300.0
 ) -> jnp.ndarray:
     """
     Generate a reference trajectory with constant thrust fraction.
-    
+
     This provides orbital structure (periapsis/apoapsis locations) for
-    physics-aware bias computation.
-    
+    physics-aware bias computation. Works for both 2D (4-state) and 3D (6/7-state).
+
     Args:
         num_steps: Number of time steps
         dt: Time step
-        thrust_accel: Thrust acceleration magnitude
+        thrust_accel: Thrust acceleration magnitude (or thrust_norm for 3D)
         initial_state: Initial state (defaults to 200km LEO)
         constant_thrust_fraction: Fraction of time with thrust on
-        
+        isp_normalized: Normalized specific impulse (only used for 3D)
+
     Returns:
-        reference_trajectory: (num_steps+1, 4) state history
+        reference_trajectory: (num_steps+1, 4 or 7) state history
     """
     if initial_state is None:
         initial_state = get_initial_state_4d(200.0)
     
-    # Create a simple thrust schedule: thrust for first X% of each orbit
-    # For a rough reference, just use constant thrust at reduced level
-    constant_schedule = jnp.full(num_steps, constant_thrust_fraction * thrust_accel)
-    
-    reference_traj = propagate_trajectory_4state(
-        initial_state[:4], constant_schedule, dt, num_steps
-    )
-    
+    # Detect dimensionality from initial state
+    is_3d = len(initial_state) >= 6
+
+    if is_3d:
+        # 3D reference: use propagate_trajectory_with_mass_3d with constant thrust fraction
+        state_3d = initial_state[:7] if len(initial_state) >= 7 else jnp.append(initial_state[:6], 1.0)
+        constant_schedule = jnp.where(
+            jnp.arange(num_steps) < int(num_steps * constant_thrust_fraction),
+            1.0, 0.0
+        )
+        # Use a repeating pattern: thrust for X% of each ~1000-step block
+        block_size = 1000
+        block_pattern = jnp.where(jnp.arange(block_size) < int(block_size * constant_thrust_fraction), 1.0, 0.0)
+        constant_schedule = jnp.tile(block_pattern, num_steps // block_size + 1)[:num_steps]
+
+        reference_traj = propagate_trajectory_with_mass_3d(
+            state_3d, constant_schedule, thrust_accel, isp_normalized, dt, num_steps
+        )
+    else:
+        # 2D reference (original path)
+        constant_schedule = jnp.full(num_steps, constant_thrust_fraction * thrust_accel)
+        reference_traj = propagate_trajectory_4state(
+            initial_state[:4], constant_schedule, dt, num_steps
+        )
+
     return reference_traj
-
-
-# =============================================================================
-# Adaptive Bias Field (Cross-Entropy Method Style)
-# =============================================================================
 
 def update_bias_from_elite_samples(
     elite_schedules: jnp.ndarray,
@@ -198,11 +197,6 @@ def update_bias_from_elite_samples(
         updated_bias = jnp.convolve(updated_bias, kernel, mode='same')
     
     return updated_bias
-
-
-# =============================================================================
-# Constraint-Aware Schedule Filtering
-# =============================================================================
 
 def filter_schedules_by_fuel_budget(
     schedules: jnp.ndarray,
@@ -271,11 +265,6 @@ def repair_schedule_fuel_budget(
     
     return repaired
 
-
-# =============================================================================
-# Eclipse Constraint (For Future Use)
-# =============================================================================
-
 def compute_eclipse_windows(
     trajectory: jnp.ndarray,
     earth_shadow_cone_angle: float = 0.26  # ~15 degrees in radians
@@ -342,11 +331,6 @@ def apply_eclipse_constraint(
     updated_field = bias_field + eclipse_penalty * eclipse_mask.astype(float)
     
     return updated_field
-
-
-# =============================================================================
-# Complete Physics-Guided Sampling Pipeline
-# =============================================================================
 
 class PhysicsGuidedScheduleGenerator:
     """
@@ -462,11 +446,6 @@ class PhysicsGuidedScheduleGenerator:
             'beta': 1.0,  # Inverse temperature
             'num_steps': self.num_steps
         }
-
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 __all__ = [
     'compute_physics_bias_field',

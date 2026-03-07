@@ -1,18 +1,10 @@
 """
-CR3BP Constants for Earth-Moon System
-=====================================
+CR3BP constants for the Earth-Moon system.
 
-All values are exact or high-precision. This module serves as the single
-source of truth for physical constants across both THRML-Sandbox and QNTM-Sandbox.
-
-Reference: JPL DE440/441 ephemerides, IAU 2015 resolutions
+Reference: JPL DE440/441 ephemerides, IAU 2015 resolutions.
 """
 import jax.numpy as jnp
 import numpy as np
-
-# =============================================================================
-# Mass Parameters
-# =============================================================================
 
 # Mass ratio μ = M_Moon / (M_Earth + M_Moon)
 # From JPL Horizons, consistent with DE440
@@ -22,10 +14,6 @@ MU = 0.01215058560962404
 M_EARTH_KG = 5.972168e24
 M_MOON_KG = 7.34767309e22
 M_TOTAL_KG = M_EARTH_KG + M_MOON_KG
-
-# =============================================================================
-# Characteristic Quantities (CR3BP Normalization)
-# =============================================================================
 
 # Length: Earth-Moon mean distance (km)
 L_STAR_KM = 384400.0
@@ -42,10 +30,6 @@ V_STAR_MS = L_STAR_M / T_STAR_S    # m/s
 A_STAR_MS2 = V_STAR_MS / T_STAR_S  # Characteristic acceleration (m/s²)
 A_STAR_KMS2 = V_STAR_KMS / T_STAR_S  # km/s²
 
-# =============================================================================
-# Body Properties
-# =============================================================================
-
 # Radii (km)
 R_EARTH_KM = 6378.137  # Equatorial radius (WGS84)
 R_MOON_KM = 1737.4     # Mean radius
@@ -58,13 +42,13 @@ R_MOON_NORM = R_MOON_KM / L_STAR_KM
 EARTH_POS = jnp.array([-MU, 0.0])
 MOON_POS = jnp.array([1.0 - MU, 0.0])
 
+# 3D body positions
+EARTH_POS_3D = jnp.array([-MU, 0.0, 0.0])
+MOON_POS_3D = jnp.array([1.0 - MU, 0.0, 0.0])
+
 # NumPy versions for CasADi compatibility
 EARTH_POS_NP = np.array([-MU, 0.0])
 MOON_POS_NP = np.array([1.0 - MU, 0.0])
-
-# =============================================================================
-# Physical Constants
-# =============================================================================
 
 # Standard gravity (m/s²)
 G0_MS2 = 9.80665
@@ -75,20 +59,12 @@ G0_NORM = G0_MS2 / A_STAR_MS2
 # Gravitational constant (m³/kg/s²)
 G_CONST = 6.67430e-11
 
-# =============================================================================
-# Numerical Parameters
-# =============================================================================
-
 # Softening parameter to avoid singularities in gravity calculation
 EPSILON = 1e-6
 
 # Default integration tolerances
 RTOL_DEFAULT = 1e-8
 ATOL_DEFAULT = 1e-10
-
-# =============================================================================
-# Mission-Relevant Defaults
-# =============================================================================
 
 # Typical LEO parking orbit
 LEO_ALTITUDE_KM = 200.0
@@ -102,10 +78,6 @@ LUNAR_SOI_NORM = LUNAR_SOI_KM / L_STAR_KM
 # Typical low-thrust engine parameters
 DEFAULT_ISP_S = 3000.0  # Hall thruster typical
 DEFAULT_THRUST_N = 0.5  # 500 mN class
-
-# =============================================================================
-# Utility Functions
-# =============================================================================
 
 def normalize_length(value_km):
     """Convert km to normalized length."""
@@ -163,10 +135,6 @@ def compute_delta_v(m0_kg, mf_kg, isp_s):
     Δv = Isp * g0 * ln(m0/mf)
     """
     return isp_s * G0_MS2 * np.log(m0_kg / mf_kg)
-
-# =============================================================================
-# Validation
-# =============================================================================
 
 if __name__ == "__main__":
     print("CR3BP Constants for Earth-Moon System")
